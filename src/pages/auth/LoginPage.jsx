@@ -42,7 +42,6 @@ export default function LoginPage() {
       
       
       const token = payload.access_token;
-      console.log('Extracted token:', token);     
       const user = payload.user;
       if (!token || !user) {
         throw new Error('Invalid login response');
