@@ -29,6 +29,7 @@ const itemSchema = z.object({
 });
 
 const salesInvoiceSchema = z.object({
+  invoice_number: z.string().trim().optional(),
   customer_id: z.coerce.number().min(1, 'العميل مطلوب'),
   paid_amount: z.coerce.number().min(0, 'المبلغ المدفوع غير صحيح'),
   notes: z.string().optional(),
@@ -59,6 +60,7 @@ export default function CreateSalesInvoice() {
   } = useForm({
     resolver: zodResolver(salesInvoiceSchema),
     defaultValues: {
+      invoice_number: '',
       customer_id: 0,
       paid_amount: 0,
       notes: '',
@@ -127,6 +129,7 @@ export default function CreateSalesInvoice() {
     clearErrors('paid_amount');
 
     createMutation.mutate({
+      invoice_number: values.invoice_number?.trim() || undefined,
       customer_id: Number(values.customer_id),
       paid_amount: Number(values.paid_amount) || 0,
       notes: values.notes?.trim() || '',
@@ -159,6 +162,12 @@ export default function CreateSalesInvoice() {
             <h2 className="mb-3 text-base font-semibold text-text">بيانات الفاتورة</h2>
 
             <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text">رقم الفاتورة</label>
+                <Input dir="ltr" placeholder="مثال: SI-2026-001" {...register('invoice_number')} />
+                <p className="text-xs text-text-muted">يمكنك تركه فارغًا إذا أردت الترقيم التلقائي من النظام</p>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-medium text-text">العميل *</label>
                 <SearchableSelect

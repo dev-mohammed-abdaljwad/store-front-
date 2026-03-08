@@ -52,6 +52,7 @@ const itemSchema = z
   });
 
 const purchaseInvoiceSchema = z.object({
+  invoice_number: z.string().trim().optional(),
   supplier_id: z.coerce.number().min(1, 'المورد مطلوب'),
   paid_amount: z.coerce.number().min(0, 'المبلغ المدفوع غير صحيح'),
   items: z.array(itemSchema).min(1, 'أضف منتجًا واحدًا على الأقل'),
@@ -119,6 +120,7 @@ export default function CreatePurchaseInvoicePage() {
   } = useForm({
     resolver: zodResolver(purchaseInvoiceSchema),
     defaultValues: {
+      invoice_number: '',
       supplier_id: 0,
       paid_amount: 0,
       items: [defaultItem],
@@ -265,6 +267,7 @@ export default function CreatePurchaseInvoicePage() {
 
   const onSubmit = (values) => {
     const payload = {
+      invoice_number: values.invoice_number?.trim() || undefined,
       supplier_id: Number(values.supplier_id),
       paid_amount: Number(values.paid_amount) || 0,
       items: values.items.map((item) => {
@@ -307,6 +310,12 @@ export default function CreatePurchaseInvoicePage() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="rounded-xl border border-border bg-white p-4">
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium text-text">رقم الفاتورة</label>
+              <Input dir="ltr" placeholder="مثال: PI-2026-001" {...register('invoice_number')} />
+              <p className="text-xs text-text-muted">يمكنك تركه فارغًا إذا أردت الترقيم التلقائي من النظام</p>
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-text">المورد *</label>
               <select
