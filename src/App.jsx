@@ -18,6 +18,7 @@ import PurchaseInvoiceDetailsPage from './pages/store/purchase-invoices/Purchase
 import PaymentsPage from './pages/store/payments/PaymentsPage';
 import CashPage from './pages/store/cash/CashPage';
 import StoreDashboardPage from './pages/store/dashboard/StoreDashboardPage';
+import StoreSettings from './pages/store/settings/StoreSettings';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PWAInstallPrompt from './components/shared/PWAInstallPrompt';
 
@@ -52,6 +53,7 @@ export default function App() {
               <Route path="purchase-invoices/:id" element={<PurchaseInvoiceDetailsPage />} />
               <Route path="payments" element={<PaymentsPage />} />
               <Route path="cash" element={<CashPage />} />
+              <Route path="settings" element={<StoreSettings />} />
               <Route path="*" element={<Navigate to="/store/dashboard" replace />} />
             </Route>
           </Route>

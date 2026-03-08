@@ -28,6 +28,7 @@ api.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
+      localStorage.removeItem('auth_store');
 
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';

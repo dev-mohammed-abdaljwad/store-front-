@@ -12,6 +12,7 @@ import PaginationControls from '../../../components/shared/PaginationControls';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
+import { useAuthStore } from '../../../store/authStore';
 import { formatCurrency, formatDate, getBalanceColor } from '../../../utils/formatters';
 import { normalizePaginatedResponse } from '../../../utils/pagination';
 
@@ -86,6 +87,7 @@ export default function CustomerStatement() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const store = useAuthStore((state) => state.store);
 
   const defaultRange = useMemo(() => getDefaultDateRange(), []);
   const [inputFrom, setInputFrom] = useState(defaultRange.from);
@@ -260,10 +262,20 @@ export default function CustomerStatement() {
       <style>
         {`@media print {
           .no-print { display: none !important; }
+          .print-only { display: block !important; }
           .print-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
           body { background: #fff !important; }
         }`}
       </style>
+
+      <div className="print-only mb-8 hidden text-center">
+        {store?.logo_url ? (
+          <img src={store.logo_url} alt="شعار المتجر" className="mx-auto mb-2 h-16 object-contain" />
+        ) : null}
+        <h1 className="text-2xl font-bold">{store?.print_header || store?.name || 'المتجر'}</h1>
+        {store?.print_phone ? <p>{store.print_phone}</p> : null}
+        {store?.print_address ? <p>{store.print_address}</p> : null}
+      </div>
 
       <div className="rounded-xl border border-border bg-white p-4 print-card">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 no-print">

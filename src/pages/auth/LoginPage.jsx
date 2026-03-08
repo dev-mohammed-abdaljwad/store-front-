@@ -43,11 +43,12 @@ export default function LoginPage() {
       
       const token = payload.access_token;
       const user = payload.user;
+      const store = payload.store ?? user?.store ?? null;
       if (!token || !user) {
         throw new Error('Invalid login response');
       }
 
-      login(token, user);
+      login(token, user, store);
 
       if (user.role === 'super_admin') {
         navigate('/admin/dashboard', { replace: true });

@@ -6,6 +6,7 @@ import {
   HandCoins,
   Home,
   Package,
+  Settings,
   ShoppingCart,
   Truck,
   Users,
@@ -24,6 +25,7 @@ const pageTitles = {
   '/store/purchase-invoices': 'فواتير الشراء',
   '/store/payments': 'المدفوعات',
   '/store/cash': 'الخزنة',
+  '/store/settings': 'إعدادات المتجر',
 };
 
 const getPageTitle = (pathname) => {
@@ -68,11 +70,18 @@ export default function StoreLayout() {
     []
   );
 
+  const footerItems = useMemo(() => [{ label: 'إعدادات المتجر', icon: Settings, path: '/store/settings' }], []);
+
   const title = getPageTitle(location.pathname);
 
   return (
     <div className="min-h-screen bg-bg lg:flex">
-      <Sidebar items={items} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Sidebar
+        items={items}
+        footerItems={footerItems}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
 
       <div className="flex min-h-screen flex-1 flex-col">
         <Topbar title={title} onMenuClick={() => setIsSidebarOpen(true)} />
