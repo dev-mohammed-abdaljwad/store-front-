@@ -3,21 +3,30 @@ const CACHE_NAME = 'store-app-v3';
 // Files to cache for offline use:
 const urlsToCache = [
   '/',
-  '/static/js/main.chunk.js',
-  '/static/js/0.chunk.js',
-  '/static/js/bundle.js',
-  '/static/css/main.chunk.css',
   '/manifest.json',
   '/icons/icon-192x192.png?v=20260308',
   '/icons/icon-512x512.png?v=20260308',
 ];
 
+const cacheAppShell = async (cache) => {
+  // Avoid install failure when one URL is unavailable (404/network).
+  await Promise.all(
+    urlsToCache.map(async (url) => {
+      try {
+        await cache.add(new Request(url, { cache: 'reload' }));
+      } catch (error) {
+        console.warn('PWA: failed to pre-cache', url, error);
+      }
+    })
+  );
+};
+
 // Install - cache files:
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('PWA: caching app shell');
-      return cache.addAll(urlsToCache);
+      await cacheAppShell(cache);
     })
   );
   self.skipWaiting();
