@@ -306,6 +306,7 @@ export default function CreatePurchaseInvoicePage() {
           </Link>
         }
       />
+      
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="rounded-xl border border-border bg-white p-4">
