@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Truck,
   Users,
+  Warehouse,
 } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/shared/Sidebar';
@@ -25,6 +26,7 @@ const pageTitles = {
   '/store/purchase-invoices': 'فواتير الشراء',
   '/store/payments': 'المدفوعات',
   '/store/cash': 'الخزنة',
+  '/store/inventory': 'المخزن',
   '/store/settings': 'إعدادات المتجر',
 };
 
@@ -66,6 +68,7 @@ export default function StoreLayout() {
       { label: 'فواتير البيع', icon: FileSpreadsheet, path: '/store/sales-invoices' },
       { label: 'فواتير الشراء', icon: ShoppingCart, path: '/store/purchase-invoices' },
       { label: 'الخزنة', icon: Banknote, path: '/store/cash' },
+      { label: 'المخزن', icon: Warehouse, path: '/store/inventory' },
     ],
     []
   );
