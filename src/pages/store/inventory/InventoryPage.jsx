@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, FileSpreadsheet, FileText, Package, Search, Warehouse, XCircle } from 'lucide-react';
+import { AlertTriangle, FileSpreadsheet, FileText, Package, Search, ShoppingCart, Warehouse, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { getInventory } from '../../../api/inventory';
+import { Link } from 'react-router-dom';
+import { getInventory, getInventoryDeficits } from '../../../api/inventory';
 import LoadingSpinner from '../../../components/shared/LoadingSpinner';
 import PageHeader from '../../../components/shared/PageHeader';
 import StatsCard from '../../../components/shared/StatsCard';
@@ -40,6 +41,14 @@ const normalizeItem = (item) => {
   };
 };
 
+const extractDeficits = (response) => {
+  const payload = response?.data?.data ?? response?.data ?? [];
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload)) return payload;
+  return [];
+};
+
 const getStatusLabel = (status) => {
   if (status === 'low') return 'منخفض';
   if (status === 'out') return 'نافد';
@@ -68,10 +77,34 @@ export default function InventoryPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const deficitsQuery = useQuery({
+    queryKey: ['inventory-deficits'],
+    queryFn: async () => extractDeficits(await getInventoryDeficits()),
+    staleTime: 60 * 1000,
+  });
+
   const inventory = useMemo(() => {
     const source = Array.isArray(inventoryQuery.data) ? inventoryQuery.data : [];
     return source.map(normalizeItem);
   }, [inventoryQuery.data]);
+
+  const deficits = useMemo(() => {
+    const source = Array.isArray(deficitsQuery.data) ? deficitsQuery.data : [];
+    return source
+      .map((item) => {
+        const currentStock = Number(item?.current_stock ?? 0);
+        const explicitDeficit = Number(item?.deficit ?? item?.deficit_quantity ?? 0);
+        const deficitValue = explicitDeficit > 0 ? explicitDeficit : Math.max(Math.abs(currentStock), 0);
+
+        return {
+          variant_id: Number(item?.variant_id ?? item?.id ?? 0),
+          product_name: item?.product_name || item?.product?.name || '—',
+          variant_name: item?.variant_name || item?.name || '—',
+          deficit: deficitValue,
+        };
+      })
+      .filter((item) => item.deficit > 0);
+  }, [deficitsQuery.data]);
 
   const categories = useMemo(() => {
     const set = new Set(inventory.map((item) => item.category || '—'));
@@ -222,6 +255,55 @@ export default function InventoryPage() {
           subtitle={`بسعر البيع: ${formatCurrency(totalValueSale)}`}
         />
       </div>
+
+      {deficits.length > 0 ? (
+        <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 no-print">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+            <h3 className="font-bold text-amber-800">تنبيه: يوجد عجز في {deficits.length.toLocaleString('ar-EG')} منتج</h3>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-amber-200 text-amber-700">
+                  <th className="pb-2 text-right font-medium">المنتج</th>
+                  <th className="pb-2 text-right font-medium">الحجم</th>
+                  <th className="pb-2 text-right font-medium">العجز</th>
+                  <th className="pb-2 text-right font-medium">الإجراء المطلوب</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deficits.map((item, index) => (
+                  <tr key={item.variant_id || index} className="border-b border-amber-200 last:border-0">
+                    <td className="py-2 font-medium text-amber-900">{item.product_name}</td>
+                    <td className="py-2 text-amber-700">{item.variant_name}</td>
+                    <td className="py-2 font-mono font-bold text-red-600">{item.deficit.toLocaleString('ar-EG')} قطعة</td>
+                    <td className="py-2">
+                      <Link
+                        to="/store/purchase-invoices/create"
+                        className="text-xs text-amber-700 underline hover:text-amber-900"
+                      >
+                        إنشاء فاتورة شراء ←
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 border-t border-amber-200 pt-3">
+            <Link
+              to="/store/purchase-invoices/create"
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              إنشاء فاتورة شراء لتسوية العجز
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       <div className="no-print flex flex-wrap gap-3 rounded-xl border border-border bg-white p-3">
         <div className="relative min-w-[220px] flex-1">

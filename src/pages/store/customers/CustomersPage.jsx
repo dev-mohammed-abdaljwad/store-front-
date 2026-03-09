@@ -29,11 +29,17 @@ import {
 } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 
+const optionalTextField = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}, z.string().optional());
+
 const customerSchema = z.object({
-  name: z.string().min(1, 'الاسم مطلوب'),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  notes: z.string().optional(),
+  name: z.string().trim().min(1, 'الاسم مطلوب'),
+  phone: optionalTextField,
+  address: optionalTextField,
+  notes: optionalTextField,
 });
 
 export default function CustomersPage() {

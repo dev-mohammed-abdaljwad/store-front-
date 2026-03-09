@@ -36,14 +36,45 @@ const createStoreSchema = z.object({
 
 const normalizeStores = (response) => {
   const payload = response?.data?.data ?? response?.data ?? [];
+  const mapStore = (store) => {
+    const normalizedPhone =
+      store?.phone ??
+      store?.phone_number ??
+      store?.owner_phone ??
+      store?.mobile ??
+      store?.owner?.phone ??
+      store?.user?.phone ??
+      undefined;
 
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.items)) return payload.items;
+    return {
+      ...store,
+      phone: toSafeString(normalizedPhone) || undefined,
+    };
+  };
+
+  if (Array.isArray(payload)) return payload.map(mapStore);
+  if (Array.isArray(payload?.data)) return payload.data.map(mapStore);
+  if (Array.isArray(payload?.items)) return payload.items.map(mapStore);
   return [];
 };
 
 const toSafeString = (value) => String(value || '').trim();
+
+const normalizeSingleStore = (store) => {
+  const normalizedPhone =
+    store?.phone ??
+    store?.phone_number ??
+    store?.owner_phone ??
+    store?.mobile ??
+    store?.owner?.phone ??
+    store?.user?.phone ??
+    undefined;
+
+  return {
+    ...store,
+    phone: toSafeString(normalizedPhone) || undefined,
+  };
+};
 
 function StatsSkeleton() {
   return (
@@ -162,7 +193,22 @@ export default function AdminDashboard() {
 
   const createMutation = useMutation({
     mutationFn: (data) => createAdminStore(data),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      const createdStoreRaw =
+        response?.data?.store ??
+        response?.store ??
+        response?.data?.data?.store ??
+        response?.data?.data ??
+        null;
+
+      if (createdStoreRaw && typeof createdStoreRaw === 'object') {
+        const createdStore = normalizeSingleStore(createdStoreRaw);
+        queryClient.setQueryData(['admin-stores'], (current) => {
+          const currentList = Array.isArray(current) ? current : [];
+          return [createdStore, ...currentList.filter((item) => item?.id !== createdStore?.id)];
+        });
+      }
+
       toast.success('تم إنشاء المتجر بنجاح');
       queryClient.invalidateQueries({ queryKey: ['admin-stores'] });
       setShowCreateModal(false);
@@ -365,12 +411,12 @@ export default function AdminDashboard() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-text">رقم الهاتف</label>
-              <Input {...register('phone')} placeholder="اختياري" />
+              <Input {...register('phone')} />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-text">العنوان</label>
-              <Input {...register('address')} placeholder="اختياري" />
+              <Input {...register('address')}  />
             </div>
 
             <DialogFooter>

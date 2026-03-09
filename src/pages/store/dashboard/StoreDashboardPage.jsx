@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO, startOfMonth, subDays } from 'date-fns';
 import { AlertTriangle, Banknote, FileText, ShoppingCart, TrendingUp, Users } from 'lucide-react';
@@ -20,6 +20,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getCashBalance } from '../../../api/cash';
 import { getCustomers } from '../../../api/customers';
+import { getInventoryDeficits } from '../../../api/inventory';
 import { getProducts } from '../../../api/products';
 import { getPurchaseInvoices } from '../../../api/purchaseInvoices';
 import { getSalesInvoices } from '../../../api/salesInvoices';
@@ -214,9 +215,13 @@ function SkeletonCard() {
   );
 }
 
-function StatsMiniCard({ title, value, subtitle, icon: Icon, colorClass }) {
+function StatsMiniCard({ title, value, subtitle, icon: Icon, colorClass, onClick }) {
   return (
-    <div className="min-w-[220px] rounded-xl border border-border bg-white p-4">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-w-[220px] rounded-xl border border-border bg-white p-4 text-right ${onClick ? 'transition hover:bg-slate-50' : ''}`}
+    >
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-medium text-text-muted">{title}</h3>
         <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${colorClass}`}>
@@ -225,7 +230,7 @@ function StatsMiniCard({ title, value, subtitle, icon: Icon, colorClass }) {
       </div>
       <p className="text-xl font-bold text-text">{value}</p>
       {subtitle ? <p className="mt-1 text-xs text-text-muted">{subtitle}</p> : null}
-    </div>
+    </button>
   );
 }
 
@@ -259,6 +264,7 @@ function TableSkeletonRows() {
 export default function StoreDashboardPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const [stockAlertTab, setStockAlertTab] = useState('low');
   const { today, weekAgo, monthStart } = useMemo(() => getDailyRange(), []);
 
   const cashQ = useQuery({
@@ -297,6 +303,10 @@ export default function StoreDashboardPage() {
     queryKey: ['dash-low-stock'],
     queryFn: () => getProducts(1, { low_stock: 1, per_page: 50 }),
   });
+  const deficitsQ = useQuery({
+    queryKey: ['dash-deficits'],
+    queryFn: getInventoryDeficits,
+  });
 
   const greetingDate = useMemo(
     () => new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
@@ -318,6 +328,8 @@ export default function StoreDashboardPage() {
   const purchasesMonthInvoices = extractList(purMonthQ.data, ['invoices', 'purchase_invoices']);
   const customers = extractList(customersQ.data, ['customers']);
   const lowStockProducts = extractList(lowStockQ.data, ['products']);
+  const deficitsPayload = extractPayload(deficitsQ.data);
+  const deficitsList = extractList(deficitsQ.data, ['deficits']);
 
   const dayKeys = useMemo(() => buildDayKeys(weekAgo, today), [today, weekAgo]);
   const sales7Series = useMemo(() => groupByDay(sales7Invoices, dayKeys), [dayKeys, sales7Invoices]);
@@ -372,6 +384,25 @@ export default function StoreDashboardPage() {
 
     return rows.sort((a, b) => a.available - b.available).slice(0, 5);
   }, [lowStockProducts]);
+
+  const deficitRows = useMemo(() => {
+    return deficitsList
+      .map((item, index) => {
+        const currentStock = toNumber(item?.current_stock);
+        const explicitDeficit = toNumber(item?.deficit ?? item?.deficit_quantity);
+        const deficit = explicitDeficit > 0 ? explicitDeficit : Math.max(Math.abs(currentStock), 0);
+
+        return {
+          id: String(item?.variant_id ?? item?.id ?? `def-${index}`),
+          productLabel: `${item?.product_name || item?.product?.name || '—'}${item?.variant_name ? ` - ${item.variant_name}` : ''}`,
+          deficit,
+        };
+      })
+      .filter((item) => item.deficit > 0)
+      .slice(0, 5);
+  }, [deficitsList]);
+
+  const deficitCount = toNumber(deficitsPayload?.total_deficit_items, deficitRows.length || deficitsList.length);
 
   const latestSalesToday = [...salesTodayInvoices]
     .sort((a, b) => (getInvoiceDate(b) || '').localeCompare(getInvoiceDate(a) || ''))
@@ -428,6 +459,14 @@ export default function StoreDashboardPage() {
               subtitle={`إجمالي ${formatCurrency(totalDebtAmount)}`}
               icon={Users}
               colorClass="bg-red-600"
+            />
+            <StatsMiniCard
+              title="عجز في المخزون"
+              value={deficitCount.toLocaleString('ar-EG')}
+              subtitle="تحتاج فواتير شراء"
+              icon={AlertTriangle}
+              colorClass="bg-rose-600"
+              onClick={() => navigate('/store/inventory')}
             />
           </>
         )}
@@ -544,25 +583,51 @@ export default function StoreDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-amber-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold text-text">⚠️ منتجات مخزونها منخفض</h3>
+            <h3 className="font-semibold text-text">تنبيهات المخزون</h3>
             <button type="button" onClick={() => navigate('/store/products')} className="text-sm font-semibold text-primary">
               عرض الكل →
             </button>
           </div>
 
-          {lowStockQ.isLoading ? (
+          <div className="mb-3 inline-flex overflow-hidden rounded-lg border border-border text-sm">
+            <button
+              type="button"
+              onClick={() => setStockAlertTab('low')}
+              className={`px-3 py-1.5 ${stockAlertTab === 'low' ? 'bg-amber-500 text-white' : 'text-amber-700 hover:bg-amber-50'}`}
+            >
+              منخفض ⚠️
+            </button>
+            <button
+              type="button"
+              onClick={() => setStockAlertTab('deficit')}
+              className={`border-r border-border px-3 py-1.5 ${stockAlertTab === 'deficit' ? 'bg-red-600 text-white' : 'text-red-700 hover:bg-red-50'}`}
+            >
+              عجز 🔴
+            </button>
+          </div>
+
+          {lowStockQ.isLoading || deficitsQ.isLoading ? (
             <TableSkeletonRows />
-          ) : lowStockRows.length === 0 ? (
-            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">✅ كل المنتجات مخزونها كافٍ</p>
+          ) : stockAlertTab === 'low' && lowStockRows.length === 0 ? (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">✅ كل المنتجات مخزونها كاف</p>
+          ) : stockAlertTab === 'deficit' && deficitRows.length === 0 ? (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">✅ لا يوجد عجز في المخزون</p>
           ) : (
             <div className="space-y-2 text-sm">
-              {lowStockRows.map((row) => (
-                <div key={row.id} className="grid grid-cols-12 items-center rounded-lg border border-border px-3 py-2">
-                  <p className="col-span-6 truncate text-text">{row.productLabel}</p>
-                  <p className="col-span-3 text-center font-bold text-red-600">{row.available.toLocaleString('ar-EG')}</p>
-                  <p className="col-span-3 text-left text-text-muted">{row.limit.toLocaleString('ar-EG')}</p>
-                </div>
-              ))}
+              {stockAlertTab === 'low'
+                ? lowStockRows.map((row) => (
+                    <div key={row.id} className="grid grid-cols-12 items-center rounded-lg border border-border px-3 py-2">
+                      <p className="col-span-6 truncate text-text">{row.productLabel}</p>
+                      <p className="col-span-3 text-center font-bold text-red-600">{row.available.toLocaleString('ar-EG')}</p>
+                      <p className="col-span-3 text-left text-text-muted">{row.limit.toLocaleString('ar-EG')}</p>
+                    </div>
+                  ))
+                : deficitRows.map((row) => (
+                    <div key={row.id} className="grid grid-cols-12 items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                      <p className="col-span-8 truncate text-text">{row.productLabel}</p>
+                      <p className="col-span-4 text-left font-bold text-red-700">عجز {row.deficit.toLocaleString('ar-EG')}</p>
+                    </div>
+                  ))}
             </div>
           )}
         </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -163,6 +163,8 @@ export default function CreateSalesInvoice() {
   const queryClient = useQueryClient();
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedVariants, setSelectedVariants] = useState({});
+  const [showDeficitConfirm, setShowDeficitConfirm] = useState(false);
+  const [pendingValues, setPendingValues] = useState(null);
 
   const {
     register,
@@ -192,14 +194,40 @@ export default function CreateSalesInvoice() {
 
   const createMutation = useMutation({
     mutationFn: (payload) => createSalesInvoice(payload),
-    onSuccess: (response) => {
-      const payload = response?.data?.data ?? response?.data ?? {};
+    onSuccess: async (response) => {
+      const data = response?.data ?? {};
+      const payload = data?.data ?? data;
       const invoice = payload?.invoice ?? payload;
+      const deficits =
+        data?.deficits ??
+        payload?.deficits ??
+        [];
+      const hasDeficits = Array.isArray(deficits) && deficits.length > 0;
       const invoiceNumber = invoice?.invoice_number || `INV-${invoice?.id || 'XXXX'}`;
       toast.success(`تم إنشاء الفاتورة رقم ${invoiceNumber} بنجاح`);
-      queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      navigate('/store/sales-invoices');
+
+      if (hasDeficits) {
+        setTimeout(() => {
+          toast(`يوجد عجز في ${deficits.length} منتج - راجع صفحة المخزن`, {
+            duration: 6000,
+            style: {
+              background: '#FEF3C7',
+              color: '#92400E',
+              border: '1px solid #F59E0B',
+            },
+          });
+        }, 1000);
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sales-invoices'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['inventory'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['inventory-deficits'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['dash-low-stock'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['dash-deficits'], refetchType: 'all' }),
+      ]);
+
+      navigate(hasDeficits ? '/store/inventory' : '/store/sales-invoices');
     },
     onError: () => toast.error('تعذر إنشاء فاتورة البيع'),
   });
@@ -230,6 +258,21 @@ export default function CreateSalesInvoice() {
 
   const hasStockViolation = stockViolations.some(Boolean);
   const isSaveDisabled = fields.length === 0 || selectedCustomerId <= 0;
+
+  const submitInvoice = (values) => {
+    createMutation.mutate({
+      invoice_number: values.invoice_number?.trim() || undefined,
+      customer_id: Number(values.customer_id),
+      paid_amount: Number(values.paid_amount) || 0,
+      discount_amount: Number(values.discount_amount) || 0,
+      notes: values.notes?.trim() || '',
+      items: values.items.map((item) => ({
+        variant_id: Number(item.variant_id),
+        quantity: Math.max(Number(item.quantity) || 1, 1),
+        unit_price: Number(item.unit_price),
+      })),
+    });
+  };
 
   const itemsByCategory = useMemo(() => {
     const groups = {};
@@ -291,11 +334,6 @@ export default function CreateSalesInvoice() {
   };
 
   const onSubmit = (values) => {
-    if (hasStockViolation) {
-      toast.error('لا يمكن حفظ الفاتورة: توجد كميات أكبر من المخزون المتاح');
-      return;
-    }
-
     if (Number(values.paid_amount) > netAmount) {
       setError('paid_amount', {
         type: 'manual',
@@ -306,18 +344,13 @@ export default function CreateSalesInvoice() {
 
     clearErrors('paid_amount');
 
-    createMutation.mutate({
-      invoice_number: values.invoice_number?.trim() || undefined,
-      customer_id: Number(values.customer_id),
-      paid_amount: Number(values.paid_amount) || 0,
-      discount_amount: Number(values.discount_amount) || 0,
-      notes: values.notes?.trim() || '',
-      items: values.items.map((item) => ({
-        variant_id: Number(item.variant_id),
-        quantity: Math.max(Number(item.quantity) || 1, 1),
-        unit_price: Number(item.unit_price),
-      })),
-    });
+    if (hasStockViolation) {
+      setPendingValues(values);
+      setShowDeficitConfirm(true);
+      return;
+    }
+
+    submitInvoice(values);
   };
 
   return (
@@ -411,12 +444,14 @@ export default function CreateSalesInvoice() {
                     const rowUnitPrice = Number(row.unit_price) || 0;
                     const rowTotal = quantity * rowUnitPrice;
                     const invalidStock = stockViolations[index];
+                    const isCurrentDeficit = stock < 0;
+                    const deficitQty = Math.max(quantity - stock, 0);
 
                     return (
                       <tr
                         key={field.id}
                         className={`border-b border-border last:border-0 ${
-                          invalidStock ? 'bg-red-50' : 'hover:bg-slate-50'
+                          invalidStock ? 'bg-amber-50' : 'hover:bg-slate-50'
                         }`}
                       >
                         <td className="px-3 py-2 text-xs text-text-muted">{index + 1}</td>
@@ -445,9 +480,15 @@ export default function CreateSalesInvoice() {
                           <input type="hidden" {...register(`items.${index}.variant_id`)} />
 
                           {variant ? (
-                            <p className={`mt-1 text-xs ${invalidStock ? 'text-danger' : 'text-text-muted'}`}>
-                              {invalidStock
-                                ? `المتاح فقط ${stock.toLocaleString('ar-EG')} قطعة`
+                            <p
+                              className={`mt-1 text-xs ${
+                                isCurrentDeficit ? 'font-medium text-red-600' : invalidStock ? 'text-amber-600' : 'text-text-muted'
+                              }`}
+                            >
+                              {isCurrentDeficit
+                                ? `عجز حالي: ${Math.abs(stock).toLocaleString('ar-EG')} قطعة`
+                                : invalidStock
+                                ? `سيحدث عجز ${deficitQty.toLocaleString('ar-EG')} قطعة`
                                 : `المتاح: ${stock.toLocaleString('ar-EG')} قطعة`}
                             </p>
                           ) : null}
@@ -459,7 +500,7 @@ export default function CreateSalesInvoice() {
                             min="1"
                             step="1"
                             {...register(`items.${index}.quantity`)}
-                            className={`h-8 text-sm ${invalidStock ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                            className={`h-8 text-sm ${invalidStock ? 'border-amber-500 focus-visible:ring-amber-500' : ''}`}
                           />
                           {errors.items?.[index]?.quantity ? (
                             <p className="mt-1 text-xs text-danger">{errors.items[index].quantity.message}</p>
@@ -611,6 +652,67 @@ export default function CreateSalesInvoice() {
           </div>
         </aside>
       </form>
+
+      {showDeficitConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-text">تسجيل فاتورة بعجز في المخزون</h3>
+                <p className="text-sm text-text-muted">بعض المنتجات ليس لها مخزون كاف</p>
+              </div>
+            </div>
+
+            <div className="mb-4 space-y-1 rounded-lg bg-amber-50 p-3">
+              {stockViolations.map((isViolation, index) => {
+                if (!isViolation) return null;
+                const variant = selectedVariants[index];
+                const stock = Number(variant?.current_stock ?? 0);
+                const qty = Number(rows[index]?.quantity) || 0;
+                const deficit = qty - stock;
+
+                return (
+                  <div key={index} className="flex items-center justify-between text-sm">
+                    <span className="text-amber-800">{variant?.name ?? `البند ${index + 1}`}</span>
+                    <span className="font-mono font-bold text-amber-700">عجز {Math.max(deficit, 0).toLocaleString('ar-EG')} قطعة</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="mb-6 text-sm text-text-muted">
+              سيتم تسجيل الفاتورة وسيظهر العجز في صفحة المخزن. يمكنك لاحقا إنشاء فاتورة شراء لتسوية العجز.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeficitConfirm(false);
+                  if (pendingValues) submitInvoice(pendingValues);
+                  setPendingValues(null);
+                }}
+                className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700"
+              >
+                تسجيل الفاتورة مع العجز
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeficitConfirm(false);
+                  setPendingValues(null);
+                }}
+                className="flex-1 rounded-lg border border-border py-2 font-medium text-text hover:bg-slate-50"
+              >
+                مراجعة الكميات
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
