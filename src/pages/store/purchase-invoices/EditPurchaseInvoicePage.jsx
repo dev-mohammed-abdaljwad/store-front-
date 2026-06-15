@@ -264,8 +264,8 @@ export default function EditPurchaseInvoicePage() {
       const items = invoiceData.items?.length > 0 ? invoiceData.items : [defaultItem];
       reset({
         invoice_number: invoiceData.invoice_number || '',
-        invoice_date: invoiceData.invoice_date || (invoiceData.created_at ? invoiceData.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
-        supplier_id: invoiceData.supplier_id || 0,
+        invoice_date: invoiceData.invoice_date || invoiceData.date || (invoiceData.created_at ? invoiceData.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+        supplier_id: invoiceData.supplier_id || invoiceData.supplier?.id || 0,
         paid_amount: invoiceData.paid_amount || 0,
         items: items.map(item => ({
           variant_id: item.variant_id || 0,
@@ -278,7 +278,24 @@ export default function EditPurchaseInvoicePage() {
       const newVariants = {};
       items.forEach((item, index) => {
         if (item.variant) {
-          newVariants[index] = { ...item.variant, product: item.product || item.variant.product };
+          const variantName = item.variant.name || '';
+          const productName = item.product?.name || item.variant.product?.name || '';
+          const displayName = variantName.includes(productName)
+            ? variantName
+            : productName
+            ? `${productName} - ${variantName}`
+            : variantName || `منتج #${item.variant_id}`;
+          newVariants[index] = {
+            ...item.variant,
+            name: displayName,
+            product: item.product || item.variant.product
+          };
+        } else {
+          newVariants[index] = {
+            id: item.variant_id,
+            name: item.variant_name || item.product_name || `منتج #${item.variant_id}`,
+            product: item.product
+          };
         }
       });
       setSelectedVariants(newVariants);
@@ -597,6 +614,7 @@ export default function EditPurchaseInvoicePage() {
                         <td className="px-3 py-2 align-top">
                           <SearchableSelect
                             value={selectedVariantId || null}
+                            initialSelected={variant}
                             onChange={(id, selectedVariant) => {
                               setValue(`items.${index}.variant_id`, id ?? 0, { shouldValidate: true, shouldDirty: true });
                               setValue(
@@ -729,6 +747,7 @@ export default function EditPurchaseInvoicePage() {
                         <label className="text-xs font-medium text-text-muted">المنتج / الحجم</label>
                         <SearchableSelect
                           value={selectedVariantId || null}
+                          initialSelected={variant}
                           onChange={(id, selectedVariant) => {
                             setValue(`items.${index}.variant_id`, id ?? 0, { shouldValidate: true, shouldDirty: true });
                             setValue(

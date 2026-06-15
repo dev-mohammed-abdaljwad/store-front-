@@ -463,6 +463,7 @@ export default function EditSalesInvoice() {
                 <label className="text-sm font-medium text-text">العميل *</label>
                 <SearchableSelect
                   value={selectedCustomerId || null}
+                  initialSelected={selectedCustomer}
                   onChange={(id, customer) => {
                     setValue('customer_id', id ?? 0, { shouldValidate: true, shouldDirty: true });
                     setSelectedCustomer(customer);
@@ -545,6 +546,7 @@ export default function EditSalesInvoice() {
                           <td className="px-3 py-2 align-top">
                             <SearchableSelect
                               value={selectedVariantId || null}
+                              initialSelected={variant}
                               onChange={(id, selectedVariant) => {
                                 setValue(`items.${index}.variant_id`, id ?? 0, { shouldValidate: true, shouldDirty: true });
                                 setValue(`items.${index}.unit_price`, selectedVariant?.sale_price ?? 0, {
@@ -664,6 +666,7 @@ export default function EditSalesInvoice() {
                           <label className="text-xs font-medium text-text-muted">المنتج / الحجم</label>
                           <SearchableSelect
                             value={selectedVariantId || null}
+                            initialSelected={variant}
                             onChange={(id, selectedVariant) => {
                               setValue(`items.${index}.variant_id`, id ?? 0, { shouldValidate: true, shouldDirty: true });
                               setValue(`items.${index}.unit_price`, selectedVariant?.sale_price ?? 0, {
