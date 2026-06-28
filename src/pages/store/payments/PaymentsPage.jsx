@@ -163,9 +163,8 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     const load = async () => {
-      if (!selectedPartyId) {
+      if (!invoiceDebouncedSearch) {
         setInvoices([]);
-        setValue('invoice_id', 0);
         return;
       }
 
@@ -173,16 +172,16 @@ export default function PaymentsPage() {
       try {
         const params = {
           per_page: 50,
+          search: invoiceDebouncedSearch,
         };
 
-        if (invoiceDebouncedSearch) params.search = invoiceDebouncedSearch;
         if (invoiceFrom) params.date_from = invoiceFrom;
         if (invoiceTo) params.date_to = invoiceTo;
         if (invoiceStatus && invoiceStatus !== 'all') params.status = invoiceStatus;
 
         const res = activeTab === 'customer'
-          ? await getSalesInvoices(1, { ...params, customer_id: selectedPartyId })
-          : await getPurchaseInvoices(1, { ...params, supplier_id: selectedPartyId });
+          ? await getSalesInvoices(1, params)
+          : await getPurchaseInvoices(1, params);
 
         const payload = res?.data?.data ?? res?.data ?? [];
         const items = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
@@ -195,7 +194,7 @@ export default function PaymentsPage() {
     };
 
     load();
-  }, [selectedPartyId, activeTab, setValue, invoiceDebouncedSearch, invoiceFrom, invoiceTo, invoiceStatus]);
+  }, [activeTab, invoiceDebouncedSearch, invoiceFrom, invoiceTo, invoiceStatus]);
 
   const onSubmit = (values) => {
     submitMutation.mutate(values);
@@ -277,51 +276,75 @@ export default function PaymentsPage() {
 
         {invoiceView === 'form' ? (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-text">{activeTab === 'customer' ? 'العميل *' : 'المورد *'}</label>
-
-            <div className="relative">
-              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-              <Input
-                value={searchTerm}
-                onChange={(event) => {
-                  setSearchTerm(event.target.value);
-                  setValue('party_id', 0);
-                  setValue('invoice_id', 0);
-                }}
-                placeholder={activeTab === 'customer' ? 'ابحث عن عميل...' : 'ابحث عن مورد...'}
-                className="pr-9"
-              />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-text">ابحث عن الفاتورة برقم الفاتورة أو المرجع *</label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                <Input
+                  value={invoiceSearch}
+                  onChange={(event) => {
+                    setInvoiceSearch(event.target.value);
+                    setValue('invoice_id', 0);
+                    setValue('party_id', 0);
+                  }}
+                  placeholder="أدخل رقم الفاتورة للبحث..."
+                  className="pr-9"
+                />
+              </div>
             </div>
 
-            {loadingParties ? (
+            {loadingInvoices ? (
               <LoadingSpinner size="sm" />
-            ) : (
-              <select
-                {...register('party_id')}
-                className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text"
-              >
-                <option value={0}>{activeTab === 'customer' ? 'اختر عميلًا' : 'اختر موردًا'}</option>
-                {parties.map((party) => (
-                  <option key={party.id} value={party.id}>
-                    {party.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {selectedParty ? (
-              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-text-muted">
-                {selectedParty.name} — الرصيد: <BalanceDisplay balance={Number(selectedParty.balance) || 0} />
+            ) : invoices.length > 0 ? (
+              <div className="rounded-lg border border-border p-2 bg-slate-50 space-y-2 max-h-60 overflow-y-auto">
+                <div className="text-xs font-semibold text-text-muted px-1">نتائج بحث الفواتير:</div>
+                {invoices.map((inv) => {
+                  const isSelected = selectedInvoiceId === inv.id;
+                  const partyName = inv.customer?.name ?? inv.supplier?.name ?? 'عميل غير معروف';
+                  return (
+                    <div
+                      key={inv.id}
+                      onClick={() => {
+                        setValue('invoice_id', inv.id);
+                        setValue('party_id', inv.customer_id ?? inv.supplier_id ?? 0);
+                        if (inv.remaining_amount !== undefined) {
+                          setValue('amount', inv.remaining_amount);
+                        }
+                      }}
+                      className={`flex flex-col md:flex-row md:items-center justify-between p-2 rounded-md cursor-pointer border transition-all text-sm ${
+                        isSelected
+                          ? 'bg-primary/10 border-primary text-primary-dark font-medium'
+                          : 'bg-white border-border hover:bg-slate-100 text-text'
+                      }`}
+                    >
+                      <div>
+                        <span className="font-semibold">#{inv.invoice_number ?? inv.number ?? inv.id}</span>
+                        <span className="mx-2 text-text-muted">|</span>
+                        <span>{partyName}</span>
+                      </div>
+                      <div className="text-xs space-x-2 mt-1 md:mt-0">
+                        <span className="bg-slate-200 px-2 py-0.5 rounded text-text-muted">المتبقي: {inv.remaining_amount ?? 0}</span>
+                        <span className="bg-slate-200 px-2 py-0.5 rounded text-text-muted">الإجمالي: {inv.total_amount ?? inv.total ?? 0}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+            ) : invoiceDebouncedSearch ? (
+              <p className="text-sm text-text-muted">لا توجد فواتير تطابق بحثك</p>
             ) : null}
 
+            {selectedInvoiceId > 0 && (
+              <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-800">
+                تم اختيار الفاتورة بنجاح. سيتم ربط التحصيل بالفاتورة المختارة وتلقائياً بالعميل/المورد المرتبط بها.
+              </div>
+            )}
+
             {errors.invoice_id ? <p className="text-sm text-danger">{errors.invoice_id.message}</p> : null}
-          </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-text">المبلغ *</label>
+              <label className="text-sm font-medium text-text">المبلغ المراد تحصيله/دفعه *</label>
               <Input type="number" min="0" step="0.01" {...register('amount')} />
               {errors.amount ? <p className="text-sm text-danger">{errors.amount.message}</p> : null}
             </div>
@@ -331,85 +354,6 @@ export default function PaymentsPage() {
               <Input type="date" {...register('date')} />
             </div>
           </div>
-
-          {activeTab === 'customer' ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-text">رقم فاتورة التحصيل</label>
-              <select {...register('invoice_id')} className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text">
-                <option value={0}>اختَر فاتورة (اختياري)</option>
-                {loadingInvoices ? (
-                  <option value={0}>جارٍ التحميل...</option>
-                ) : (
-                  invoices.map((inv) => (
-                    <option key={inv.id} value={inv.id}>
-                      #{inv.id} — {inv.number ?? inv.reference ?? ''} — المتبقي: {inv.remaining_amount ?? inv.remaining ?? inv.remainingAmount ?? 0}
-                    </option>
-                  ))
-                )}
-              </select>
-              <p className="text-xs text-text-muted">اختر الفاتورة المراد ربط السند بها</p>
-              {invoices.length > 0 ? (
-                <div className="mt-3 w-full overflow-x-auto">
-                  <div className="text-sm font-semibold mb-2">فواتير التحصيل المرتبطة</div>
-                  <table className="w-full text-sm table-auto">
-                    <thead>
-                      <tr className="text-left text-text-muted">
-                        <th className="py-1 pr-3">#</th>
-                        <th className="py-1 pr-3">المرجع</th>
-                        <th className="py-1 pr-3">التاريخ</th>
-                        <th className="py-1 pr-3">الإجمالي</th>
-                        <th className="py-1 pr-3">المتبقي</th>
-                        <th className="py-1 pr-3">اختيار</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {invoices.map((inv) => (
-                            <tr key={inv.id} className="border-t">
-                              <td className="py-2 pr-3">{inv.id}</td>
-                              <td className="py-2 pr-3">{inv.number ?? inv.reference ?? '-'}</td>
-                              <td className="py-2 pr-3">{inv.invoice_date ?? inv.date ?? inv.created_at ?? '-'}</td>
-                              <td className="py-2 pr-3">{inv.total ?? inv.amount ?? '-'}</td>
-                              <td className="py-2 pr-3">{inv.remaining_amount ?? inv.remaining ?? inv.remainingAmount ?? 0}</td>
-                              <td className="py-2 pr-3">
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    className="rounded-md bg-primary px-3 py-1 text-white text-xs"
-                                    onClick={() => setValue('invoice_id', inv.id)}
-                                  >
-                                    اختيار
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border px-3 py-1 text-xs"
-                                    onClick={() => loadInvoiceDetails(inv.id)}
-                                  >
-                                    عرض
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border px-3 py-1 text-xs"
-                                    onClick={() => navigate(activeTab === 'customer' ? `/store/sales-invoices/${inv.id}/edit` : `/store/purchase-invoices/${inv.id}/edit`)}
-                                  >
-                                    تعديل
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border px-3 py-1 text-xs text-danger"
-                                    onClick={() => handleDeleteInvoice(inv.id)}
-                                  >
-                                    حذف
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-text">الملاحظات</label>
