@@ -1191,7 +1191,7 @@ export default function SalesInvoicesPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-text">التاريخ</label>
-                  <Input type="date" value={editingPayment.date ?? editingPayment.transaction_date ?? editingPayment.payment_date ?? ''} onChange={(e) => setEditingPayment((s) => ({ ...s, date: e.target.value }))} />
+                  <Input type="date" value={editingPayment.payment_date ?? ''} onChange={(e) => setEditingPayment((s) => ({ ...s, date: e.target.value }))} />
                 </div>
 
                 <div className="space-y-2">
