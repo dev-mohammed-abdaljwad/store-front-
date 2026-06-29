@@ -92,17 +92,17 @@ const normalizeList = (response) => {
 
   const meta = paginationSource
     ? {
-        page: Math.max(1, toNumber(paginationSource?.current_page ?? paginationSource?.page, normalized.meta.page)),
-        perPage: Math.max(1, toNumber(paginationSource?.per_page ?? paginationSource?.perPage, SALES_INVOICES_PER_PAGE)),
-        total: Math.max(0, toNumber(paginationSource?.total, normalized.meta.total)),
-        lastPage: Math.max(
-          1,
-          toNumber(
-            paginationSource?.last_page ?? paginationSource?.lastPage,
-            normalized.meta.lastPage
-          )
-        ),
-      }
+      page: Math.max(1, toNumber(paginationSource?.current_page ?? paginationSource?.page, normalized.meta.page)),
+      perPage: Math.max(1, toNumber(paginationSource?.per_page ?? paginationSource?.perPage, SALES_INVOICES_PER_PAGE)),
+      total: Math.max(0, toNumber(paginationSource?.total, normalized.meta.total)),
+      lastPage: Math.max(
+        1,
+        toNumber(
+          paginationSource?.last_page ?? paginationSource?.lastPage,
+          normalized.meta.lastPage
+        )
+      ),
+    }
     : normalized.meta;
 
   return {
@@ -195,7 +195,7 @@ export default function SalesInvoicesPage() {
     queryKey: ['customer-payments', paymentsCurrentPage, searchTerm],
     queryFn: async () => {
       const res = await getAllCustomerPayments({ page: paymentsCurrentPage, per_page: 50, search: searchTerm || undefined });
-      
+
       const normalized = normalizePaginatedResponse(res);
       let items = normalized.items;
       const customersForLookup = extractItems(customersQuery.data);
@@ -592,9 +592,8 @@ export default function SalesInvoicesPage() {
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 sm:flex-initial border-l border-border px-4 py-2 text-sm font-medium transition-colors first:border-l-0 ${
-              activeTab === tab.key ? 'bg-primary text-white' : 'text-text hover:bg-slate-50'
-            }`}
+            className={`flex-1 sm:flex-initial border-l border-border px-4 py-2 text-sm font-medium transition-colors first:border-l-0 ${activeTab === tab.key ? 'bg-primary text-white' : 'text-text hover:bg-slate-50'
+              }`}
           >
             {tab.label}
           </button>
@@ -604,68 +603,68 @@ export default function SalesInvoicesPage() {
       {activeTab === 'invoices' && (
         <>
           <div className="mb-4 grid gap-3 rounded-xl border border-border bg-white p-3 md:grid-cols-5">
-        <div className="relative md:col-span-1">
-          <Input
-            value={searchTerm}
-            onChange={(e) => {
-              setCurrentPage(1);
-              setSearchTerm(e.target.value);
-            }}
-            placeholder="بحث برقم الفاتورة أو اسم العميل..."
-            className="pr-9"
-          />
-        </div>
-        <select
-          value={filters.customer_id}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, customer_id: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <option value="">كل العملاء</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
+            <div className="relative md:col-span-1">
+              <Input
+                value={searchTerm}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setSearchTerm(e.target.value);
+                }}
+                placeholder="بحث برقم الفاتورة..."
+                className="pr-9"
+              />
+            </div>
+            <select
+              value={filters.customer_id}
+              onChange={(event) => {
+                setCurrentPage(1);
+                setFilters((previous) => ({ ...previous, customer_id: event.target.value }));
+              }}
+              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <option value="">كل العملاء</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
 
-        <select
-          value={filters.status}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, status: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          {statusOptions.map((option) => (
-            <option key={option.value || 'all'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+            <select
+              value={filters.status}
+              onChange={(event) => {
+                setCurrentPage(1);
+                setFilters((previous) => ({ ...previous, status: event.target.value }));
+              }}
+              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-        <input
-          type="date"
-          value={filters.from}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, from: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        />
+            <input
+              type="date"
+              value={filters.from}
+              onChange={(event) => {
+                setCurrentPage(1);
+                setFilters((previous) => ({ ...previous, from: event.target.value }));
+              }}
+              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
 
-        <input
-          type="date"
-          value={filters.to}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, to: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        />
-      </div>
+            <input
+              type="date"
+              value={filters.to}
+              onChange={(event) => {
+                setCurrentPage(1);
+                setFilters((previous) => ({ ...previous, to: event.target.value }));
+              }}
+              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </div>
 
           {salesInvoicesQuery.isLoading ? (
             <LoadingSpinner />
@@ -866,12 +865,12 @@ export default function SalesInvoicesPage() {
                 setReceiptSearchTerm('');
                 setDebouncedReceiptSearchTerm('');
                 resetReceiptForm({
-                    invoice_id: 0,
-                    party_id: 0,
-                    amount: '',
-                    notes: '',
-                    date: getTodayDate(),
-                    receipt_number: '',
+                  invoice_id: 0,
+                  party_id: 0,
+                  amount: '',
+                  notes: '',
+                  date: getTodayDate(),
+                  receipt_number: '',
                 });
               }
             }}
@@ -885,88 +884,88 @@ export default function SalesInvoicesPage() {
                 <DialogDescription>سجّل تحصيل نقدي من  عميل</DialogDescription>
               </DialogHeader>
 
-          <form onSubmit={handleReceiptSubmit(onSubmitCustomerReceipt)} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-text">العميل *</label>
+              <form onSubmit={handleReceiptSubmit(onSubmitCustomerReceipt)} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">العميل *</label>
 
-              <div className="relative">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-                <Input
-                  value={receiptSearchTerm}
-                  onChange={(event) => {
-                    setReceiptSearchTerm(event.target.value);
-                    setReceiptValue('party_id', 0);
-                  }}
-                  placeholder="ابحث عن عميل..."
-                  className="pr-9"
-                />
-              </div>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                    <Input
+                      value={receiptSearchTerm}
+                      onChange={(event) => {
+                        setReceiptSearchTerm(event.target.value);
+                        setReceiptValue('party_id', 0);
+                      }}
+                      placeholder="ابحث عن عميل..."
+                      className="pr-9"
+                    />
+                  </div>
 
-              {customerReceiptsQuery.isLoading ? (
-                <LoadingSpinner size="sm" />
-              ) : (
-                <select
-                  {...registerReceipt('party_id')}
-                  className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text"
-                >
-                  <option value={0}>اختر عميلًا</option>
-                  {customersForReceipt.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+                  {customerReceiptsQuery.isLoading ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <select
+                      {...registerReceipt('party_id')}
+                      className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text"
+                    >
+                      <option value={0}>اختر عميلًا</option>
+                      {customersForReceipt.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
-              {selectedCustomer ? (
-                <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-text-muted">
-                  {selectedCustomer.name} — الرصيد: <BalanceDisplay balance={Number(selectedCustomer.balance) || 0} />
+                  {selectedCustomer ? (
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-text-muted">
+                      {selectedCustomer.name} — الرصيد: <BalanceDisplay balance={Number(selectedCustomer.balance) || 0} />
+                    </div>
+                  ) : null}
+
+                  {receiptErrors.party_id ? <p className="text-sm text-danger">{receiptErrors.party_id.message}</p> : null}
                 </div>
-              ) : null}
 
-              {receiptErrors.party_id ? <p className="text-sm text-danger">{receiptErrors.party_id.message}</p> : null}
-            </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text">المبلغ *</label>
+                    <Input type="number" min="0" step="0.01" {...registerReceipt('amount')} />
+                    {receiptErrors.amount ? <p className="text-sm text-danger">{receiptErrors.amount.message}</p> : null}
+                  </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text">المبلغ *</label>
-                <Input type="number" min="0" step="0.01" {...registerReceipt('amount')} />
-                {receiptErrors.amount ? <p className="text-sm text-danger">{receiptErrors.amount.message}</p> : null}
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text">التاريخ</label>
+                    <Input type="date" {...registerReceipt('date')} />
+                    {receiptErrors.date ? <p className="text-sm text-danger">{receiptErrors.date.message}</p> : null}
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text">التاريخ</label>
-                <Input type="date" {...registerReceipt('date')} />
-                {receiptErrors.date ? <p className="text-sm text-danger">{receiptErrors.date.message}</p> : null}
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">رقم فاتورة التحصيل</label>
+                  <Input {...registerReceipt('receipt_number')} placeholder="مثال: RCP-001" dir="ltr" />
+                  <p className="text-xs text-text-muted">اختياري — رقم السند أو الإيصال</p>
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-text">رقم فاتورة التحصيل</label>
-              <Input {...registerReceipt('receipt_number')} placeholder="مثال: RCP-001" dir="ltr" />
-              <p className="text-xs text-text-muted">اختياري — رقم السند أو الإيصال</p>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">الملاحظات</label>
+                  <Input {...registerReceipt('notes')} placeholder="ملاحظات إضافية" />
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-text">الملاحظات</label>
-              <Input {...registerReceipt('notes')} placeholder="ملاحظات إضافية" />
-            </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsReceiptModalOpen(false)}
+                    disabled={customerReceiptMutation.isPending}
+                  >
+                    إغلاق
+                  </Button>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsReceiptModalOpen(false)}
-                disabled={customerReceiptMutation.isPending}
-              >
-                إغلاق
-              </Button>
-
-              <Button type="submit" disabled={customerReceiptMutation.isPending}>
-                {customerReceiptMutation.isPending ? 'جاري الحفظ...' : '💾 حفظ سند القبض'}
-              </Button>
-            </DialogFooter>
-          </form>
+                  <Button type="submit" disabled={customerReceiptMutation.isPending}>
+                    {customerReceiptMutation.isPending ? 'جاري الحفظ...' : '💾 حفظ سند القبض'}
+                  </Button>
+                </DialogFooter>
+              </form>
             </DialogContent>
           </Dialog>
 
@@ -986,44 +985,44 @@ export default function SalesInvoicesPage() {
                 <DialogDescription>سيتم عكس المخزون والقيود المالية</DialogDescription>
               </DialogHeader>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-text">سبب الإلغاء *</label>
-            <textarea
-              value={cancelReason}
-              onChange={(event) => {
-                setCancelReason(event.target.value);
-                if (cancelReasonError) setCancelReasonError('');
-              }}
-              rows={4}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              placeholder="اكتب سبب الإلغاء"
-            />
-            {cancelReasonError ? <p className="text-sm text-danger">{cancelReasonError}</p> : null}
-          </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text">سبب الإلغاء *</label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(event) => {
+                    setCancelReason(event.target.value);
+                    if (cancelReasonError) setCancelReasonError('');
+                  }}
+                  rows={4}
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  placeholder="اكتب سبب الإلغاء"
+                />
+                {cancelReasonError ? <p className="text-sm text-danger">{cancelReasonError}</p> : null}
+              </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setCancelInvoice(null);
-                setCancelReason('');
-                setCancelReasonError('');
-              }}
-              disabled={cancelMutation.isPending}
-            >
-              إلغاء
-            </Button>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setCancelInvoice(null);
+                    setCancelReason('');
+                    setCancelReasonError('');
+                  }}
+                  disabled={cancelMutation.isPending}
+                >
+                  إلغاء
+                </Button>
 
-            <Button
-              type="button"
-              onClick={onCancelConfirm}
-              disabled={cancelMutation.isPending}
-              className="bg-danger text-white hover:bg-red-700 focus-visible:ring-danger"
-            >
-              {cancelMutation.isPending ? 'جاري التنفيذ...' : 'تأكيد الإلغاء'}
-            </Button>
-          </DialogFooter>
+                <Button
+                  type="button"
+                  onClick={onCancelConfirm}
+                  disabled={cancelMutation.isPending}
+                  className="bg-danger text-white hover:bg-red-700 focus-visible:ring-danger"
+                >
+                  {cancelMutation.isPending ? 'جاري التنفيذ...' : 'تأكيد الإلغاء'}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </>
@@ -1058,16 +1057,18 @@ export default function SalesInvoicesPage() {
                     { key: 'customer_name', label: 'العميل', render: (value, row) => row.customer_name ?? row.party_name ?? row.customer?.name ?? row.party?.name ?? '—' },
 
                     { key: 'desc', label: 'البيان', render: (value, row) => row.notes ?? row.description ?? row.statement ?? row.note ?? row.raw?.notes ?? '—' },
-                    { key: 'actions', label: 'إجراءات', render: (_, row) => (
-                      <div className="flex items-center gap-2">
-                        <button type="button" className="rounded-md p-2 text-primary hover:bg-primary/10" title="تعديل" onClick={() => { setEditingPayment(row); setPaymentsModalOpen(true); }}>
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button type="button" className="rounded-md p-2 text-danger hover:bg-red-50" title="حذف" onClick={() => handleDeletePayment(row)}>
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ) },
+                    {
+                      key: 'actions', label: 'إجراءات', render: (_, row) => (
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="rounded-md p-2 text-primary hover:bg-primary/10" title="تعديل" onClick={() => { setEditingPayment(row); setPaymentsModalOpen(true); }}>
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button type="button" className="rounded-md p-2 text-danger hover:bg-red-50" title="حذف" onClick={() => handleDeletePayment(row)}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )
+                    },
                   ]}
                   data={paymentsTabList}
                   loading={paymentsTabLoading}
@@ -1093,7 +1094,7 @@ export default function SalesInvoicesPage() {
                       <div className="text-sm text-text-muted">{p.date ?? p.payment_date ?? p.transaction_date ?? '—'}</div>
                       <div className="text-lg font-semibold">{formatCurrency(p.amount ?? p.debit ?? p.credit ?? 0)}</div>
                       <div className="text-sm text-text-muted">{p.customer_name}</div>
-                      <div className="text-sm text-text-muted">{ p.description}</div>
+                      <div className="text-sm text-text-muted">{p.description}</div>
                     </div>
                   ))
                 )}
@@ -1141,7 +1142,7 @@ export default function SalesInvoicesPage() {
                   <label className="text-sm font-medium text-text">الاسم</label>
                   <Input type="text" value={editingPayment.party_name ?? ''} onChange={(e) => setEditingPayment((s) => ({ ...s, party_name: e.target.value }))} />
                 </div>
-                
+
               </div>
 
               <div className="space-y-2">

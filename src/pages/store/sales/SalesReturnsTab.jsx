@@ -45,7 +45,7 @@ export default function SalesReturnsTab() {
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ابحث برقم/اسم العميل/رقم الفاتورة..."
+              placeholder="بحث برقم الفاتورة أو المرتجع..."
               className="w-full"
             />
           </div>

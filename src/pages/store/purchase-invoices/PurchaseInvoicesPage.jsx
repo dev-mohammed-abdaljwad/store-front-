@@ -540,7 +540,7 @@ export default function PurchaseInvoicesPage() {
               setSearchTerm(event.target.value);
               setCurrentPage(1);
             }}
-            placeholder="بحث برقم الفاتورة أو اسم المورد..."
+            placeholder="بحث برقم الفاتورة..."
             className="pr-9"
           />
         </div>
@@ -651,7 +651,7 @@ export default function PurchaseInvoicesPage() {
                                     setSearchTerm(event.target.value);
                                     setCurrentPage(1);
                                   }}
-                                  placeholder="بحث برقم السند أو اسم المورد..."
+                                  placeholder="بحث برقم السند..."
                                   className="pr-9"
                                 />
                               </div>
