@@ -192,11 +192,9 @@ export default function SalesInvoicesPage() {
   });
 
   const customerPaymentsQuery = useQuery({
-    queryKey: ['customer-payments', paymentsCurrentPage, filters.customer_id, filters.from, filters.to, searchTerm],
+    queryKey: ['customer-payments', paymentsCurrentPage, searchTerm],
     queryFn: async () => {
-      const res = filters.customer_id
-        ? await getCustomerPayments(filters.customer_id, { page: paymentsCurrentPage, per_page: 50 })
-        : await getAllCustomerPayments({ page: paymentsCurrentPage, per_page: 50 });
+      const res = await getAllCustomerPayments({ page: paymentsCurrentPage, per_page: 50, search: searchTerm || undefined });
       
       const normalized = normalizePaginatedResponse(res);
       let items = normalized.items;
@@ -210,25 +208,6 @@ export default function SalesInvoicesPage() {
           date: it.date ?? it.payment_date ?? it.transaction_date ?? undefined,
         };
       });
-
-      // Client-side search and date filtering since backend doesn't support them for collections list
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        enriched = enriched.filter(
-          (it) =>
-            (it.receipt_number && it.receipt_number.toLowerCase().includes(term)) ||
-            (it.payment_number && it.payment_number.toLowerCase().includes(term)) ||
-            (it.customer_name && it.customer_name.toLowerCase().includes(term)) ||
-            (it.notes && it.notes.toLowerCase().includes(term)) ||
-            (it.amount && String(it.amount).includes(term))
-        );
-      }
-      if (filters.from) {
-        enriched = enriched.filter((it) => it.date && it.date >= filters.from);
-      }
-      if (filters.to) {
-        enriched = enriched.filter((it) => it.date && it.date <= filters.to);
-      }
 
       return {
         items: enriched,
@@ -1060,46 +1039,10 @@ export default function SalesInvoicesPage() {
                   setPaymentsCurrentPage(1);
                   setSearchTerm(e.target.value);
                 }}
-                placeholder="بحث برقم الفاتورة أو اسم العميل..."
+                placeholder="بحث برقم السند..."
                 className="pr-9"
               />
             </div>
-
-            <select
-              value={filters.customer_id}
-              onChange={(event) => {
-                setPaymentsCurrentPage(1);
-                setFilters((previous) => ({ ...previous, customer_id: event.target.value }));
-              }}
-              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="">كل العملاء</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="date"
-              value={filters.from}
-              onChange={(event) => {
-                setPaymentsCurrentPage(1);
-                setFilters((previous) => ({ ...previous, from: event.target.value }));
-              }}
-              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
-
-            <input
-              type="date"
-              value={filters.to}
-              onChange={(event) => {
-                setPaymentsCurrentPage(1);
-                setFilters((previous) => ({ ...previous, to: event.target.value }));
-              }}
-              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
           </div>
 
           {paymentsTabLoading ? (
