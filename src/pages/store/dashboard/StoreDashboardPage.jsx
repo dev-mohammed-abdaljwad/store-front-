@@ -841,6 +841,7 @@ export default function StoreDashboardPage() {
 
       {/* ── Compare chart + month summary ──────────────────────────────── */}
       <div className="mb-5 grid gap-4 xl:grid-cols-3">
+
         <div className="min-w-0 xl:col-span-2">
           <ChartContainer title="مقارنة المبيعات والمشتريات" isLoading={sales7Q.isLoading || pur7Q.isLoading}>
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
