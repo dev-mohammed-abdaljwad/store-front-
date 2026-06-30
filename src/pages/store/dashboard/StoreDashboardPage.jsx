@@ -531,6 +531,13 @@ export default function StoreDashboardPage() {
     queryKey: ['dash-pur-month', monthStart, today],
     queryFn: () => getPurchaseInvoices(1, { from: monthStart, to: today, per_page: 500 }),
   });
+  const categoryStatsQ = useQuery({
+    queryKey: ['dash-category-stats', monthStart, today],
+    queryFn: () => {
+      const { getSalesCategoryStats } = require('../../../api/salesInvoices');
+      return getSalesCategoryStats({ from: monthStart, to: today });
+    },
+  });
   const customersQ = useQuery({
     queryKey: ['dash-customers'],
     queryFn: () => getCustomers(1, { per_page: 200 }),
@@ -581,6 +588,23 @@ export default function StoreDashboardPage() {
   const paymentsToday = extractList(paymentsTodayQ.data, ['payments', 'data']);
   const payments7 = extractList(payments7Q.data, ['payments', 'data']);
 
+  const categoryStatsPayload = extractPayload(categoryStatsQ.data);
+  const categoryStatsList = Array.isArray(categoryStatsPayload?.categories) ? categoryStatsPayload.categories : [];
+  const grossProfit = toNumber(categoryStatsPayload?.gross_profit);
+  const profitMargin = toNumber(categoryStatsPayload?.gross_profit_margin);
+
+  const pieCategory = useMemo(() => {
+    if (categoryStatsList.length === 0) {
+      return { hasCategoryData: false, data: [] };
+    }
+    const chartData = categoryStatsList.map((item) => ({
+      name: item.category || 'بدون تصنيف',
+      value: toNumber(item.total_sales),
+      percentage: toNumber(item.percentage),
+    }));
+    return { hasCategoryData: true, data: chartData };
+  }, [categoryStatsList]);
+
   const dayKeys = useMemo(() => buildDayKeys(weekAgo, today), [today, weekAgo]);
   const sales7Series = useMemo(() => groupByDay(sales7Invoices, dayKeys), [dayKeys, sales7Invoices]);
   const purchases7Series = useMemo(() => groupByDay(purchases7Invoices, dayKeys), [dayKeys, purchases7Invoices]);
@@ -614,7 +638,6 @@ export default function StoreDashboardPage() {
   const salesMonthTotal = sumConfirmedInvoices(salesMonthInvoices);
   const purchasesMonthTotal = sumConfirmedInvoices(purchasesMonthInvoices);
 
-  const pieCategory = useMemo(() => buildSalesCategoriesPie(salesMonthInvoices), [salesMonthInvoices]);
 
   const lowStockRows = useMemo(() => {
     const rows = [];
@@ -883,8 +906,12 @@ export default function StoreDashboardPage() {
                   <p className="font-bold text-red-700">{formatCurrency(purchasesMonthTotal)}</p>
                 </div>
               </div>
-              <div className="rounded-lg border border-dashed border-border bg-bg px-3 py-4 text-center text-sm text-text-muted">
-                ⏳ تقرير الربح سيتوفر قريباً
+              <div className="rounded-lg border border-dashed border-teal-200 bg-teal-50 px-3 py-4 text-center">
+                <p className="text-xs text-text-muted mb-1">الربح التقريبي (المبيعات - المشتريات)</p>
+                <p className={`text-xl font-bold ${grossProfit >= 0 ? 'text-teal-700' : 'text-rose-700'}`}>
+                  {formatCurrency(grossProfit)}
+                </p>
+                <p className="text-[10px] text-text-muted mt-1">هامش الربح: {profitMargin}%</p>
               </div>
             </div>
           )}
