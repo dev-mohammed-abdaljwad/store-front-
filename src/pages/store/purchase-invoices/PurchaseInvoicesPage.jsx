@@ -901,14 +901,14 @@ export default function PurchaseInvoicesPage() {
                   <label className="mb-1 block text-sm font-medium text-text">التاريخ</label>
                   <Input
                     type="date"
-                    value={editingPayment.date ?? editingPayment.transaction_date ?? editingPayment.payment_date ?? ''}
+                    value={editingPayment.transaction_date ?? editingPayment.payment_date ?? ''}
                     onChange={(e) => setEditingPayment((s) => ({ ...s, date: e.target.value }))}
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-text">رقم السند</label>
                   <Input
-                    value={editingPayment.receipt_number ?? editingPayment.receiptNumber ?? ''}
+                    value={editingPayment.payment_number ?? ''}
                     onChange={(e) => setEditingPayment((s) => ({ ...s, receipt_number: e.target.value }))}
                   />
                 </div>
