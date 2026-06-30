@@ -879,7 +879,7 @@ export default function PurchaseInvoicesPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>تعديل السند</DialogTitle>
           </DialogHeader>
