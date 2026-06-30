@@ -614,56 +614,8 @@ export default function SalesInvoicesPage() {
                 className="pr-9"
               />
             </div>
-            <select
-              value={filters.customer_id}
-              onChange={(event) => {
-                setCurrentPage(1);
-                setFilters((previous) => ({ ...previous, customer_id: event.target.value }));
-              }}
-              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="">كل العملاء</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
 
-            <select
-              value={filters.status}
-              onChange={(event) => {
-                setCurrentPage(1);
-                setFilters((previous) => ({ ...previous, status: event.target.value }));
-              }}
-              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value || 'all'} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
 
-            <input
-              type="date"
-              value={filters.from}
-              onChange={(event) => {
-                setCurrentPage(1);
-                setFilters((previous) => ({ ...previous, from: event.target.value }));
-              }}
-              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
-
-            <input
-              type="date"
-              value={filters.to}
-              onChange={(event) => {
-                setCurrentPage(1);
-                setFilters((previous) => ({ ...previous, to: event.target.value }));
-              }}
-              className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            />
           </div>
 
           {salesInvoicesQuery.isLoading ? (

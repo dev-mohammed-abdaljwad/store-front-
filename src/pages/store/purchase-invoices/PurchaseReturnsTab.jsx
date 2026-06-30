@@ -45,19 +45,19 @@ export default function PurchaseReturnsTab() {
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="بحث برقم الفاتورة أو المرتجع..."
+              placeholder="بحث برقم الفاتورة..."
               className="w-full"
             />
           </div>
 
           <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 w-full sm:w-auto"
-        >
-          <Plus size={16} />
-          مرتجع جديد
-        </button>
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 w-full sm:w-auto"
+          >
+            <Plus size={16} />
+            مرتجع جديد
+          </button>
         </div>
       </div>
 
