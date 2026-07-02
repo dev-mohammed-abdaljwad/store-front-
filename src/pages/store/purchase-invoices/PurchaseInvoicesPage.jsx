@@ -194,6 +194,7 @@ export default function PurchaseInvoicesPage() {
       setCancelReason('');
       setCancelReasonError('');
       queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['suppliers-statement'] });
     },
     onError: (error) => {
       const apiMessage =
@@ -217,6 +218,7 @@ export default function PurchaseInvoicesPage() {
         removeDeletedInvoiceFromQueryData(currentData, deletedId)
       );
       queryClient.invalidateQueries({ queryKey: ['purchase-invoices'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['suppliers-statement'] });
     },
     onError: (error) => {
       const msg = error?.response?.data?.message || 'تعذر حذف الفاتورة';
@@ -239,6 +241,7 @@ export default function PurchaseInvoicesPage() {
         date: getTodayDate(),
       });
       queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['suppliers-statement'] });
     },
     onError: () => toast.error('تعذر حفظ سند الصرف'),
   });
@@ -356,6 +359,7 @@ export default function PurchaseInvoicesPage() {
       }));
       setPaymentsTabList(enriched);
       queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['suppliers-statement'] });
     } catch (e) {
       toast.error('فشل تعديل السند');
     } finally {
@@ -396,6 +400,7 @@ export default function PurchaseInvoicesPage() {
       }));
       setPaymentsTabList(enriched);
       queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['suppliers-statement'] });
     } catch (e) {
       toast.error('فشل حذف السند');
     }

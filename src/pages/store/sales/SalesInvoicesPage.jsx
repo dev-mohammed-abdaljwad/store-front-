@@ -247,6 +247,7 @@ export default function SalesInvoicesPage() {
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
       queryClient.invalidateQueries({ queryKey: ['sales-invoice-details'] });
       queryClient.invalidateQueries({ queryKey: ['sales-reps-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['customers-statement'] });
     },
     onError: (error) => {
       const apiMessage =
@@ -309,6 +310,7 @@ export default function SalesInvoicesPage() {
       });
       queryClient.removeQueries({ queryKey: ['sales-invoice-details', deletedId] });
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['customers-statement'] });
     },
     onError: (error) => {
       if (error.message === 'cancelled_by_user') return;
@@ -335,6 +337,7 @@ export default function SalesInvoicesPage() {
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
       queryClient.invalidateQueries({ queryKey: ['sales-reps-stats'] });
       queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['customers-statement'] });
     },
     onError: () => toast.error('تعذر حفظ سند القبض'),
   });
@@ -362,6 +365,7 @@ export default function SalesInvoicesPage() {
       setPaymentsModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['customers-statement'] });
     } catch (e) {
       toast.error('فشل تعديل السند');
     } finally {
@@ -420,6 +424,7 @@ export default function SalesInvoicesPage() {
 
       queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['customers-statement'] });
     } catch (e) {
       toast.error('فشل حذف السند');
     }

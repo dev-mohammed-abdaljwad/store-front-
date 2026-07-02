@@ -147,6 +147,7 @@ export default function SupplierStatement() {
       setCancelReason('');
       setCancelReasonError('');
       queryClient.invalidateQueries({ queryKey: ['suppliers-statement', id] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
     },
     onError: (error) => {
       const apiMessage =
@@ -370,7 +371,8 @@ export default function SupplierStatement() {
         }
 
         if (row.referenceId > 0 && row.isPaymentRow) {
-          const paymentId = row.id ?? row.raw?.id ?? row.raw?.payment_id ?? row.payment_id ?? row.referenceId;
+          // referenceId is the ACTUAL payment record ID — row.id is only the statement/journal-entry ID
+          const paymentId = row.referenceId || (row.raw?.payment_id ?? row.raw?.id ?? row.id);
           return (
             <div className="flex items-center gap-1">
               <button
@@ -407,6 +409,7 @@ export default function SupplierStatement() {
                     await deletePayment(paymentId, row.referenceType);
                     toast.success('تم حذف السند');
                     queryClient.invalidateQueries({ queryKey: ['suppliers-statement', id] });
+                    queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
                   } catch (e) {
                     toast.error('فشل حذف السند');
                   }
@@ -816,7 +819,8 @@ export default function SupplierStatement() {
                       onClick={async () => {
                         const ok = window.confirm('هل متأكد من حذف سند الدفع؟ لا يمكن التراجع');
                         if (!ok) return;
-                        const paymentId = selectedPayment?.id ?? selectedPayment?.raw?.id ?? selectedPayment?.raw?.payment_id ?? selectedPayment?.payment_id ?? null;
+                        // referenceId is the ACTUAL payment record ID
+                        const paymentId = selectedPayment?.referenceId || (selectedPayment?.raw?.payment_id ?? selectedPayment?.raw?.id ?? selectedPayment?.id) || null;
                         if (!paymentId) {
                           toast.error('لا يوجد معرف صالح للسند للحذف');
                           return;
@@ -825,7 +829,8 @@ export default function SupplierStatement() {
                           await deletePayment(paymentId, selectedPayment.referenceType);
                           toast.success('تم حذف السند');
                           setSelectedPayment(null);
-                          queryClient.invalidateQueries(['suppliers-statement', id]);
+                          queryClient.invalidateQueries({ queryKey: ['suppliers-statement', id] });
+                          queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
                         } catch (e) {
                           toast.error('فشل حذف السند');
                         }
@@ -859,7 +864,8 @@ export default function SupplierStatement() {
                             transaction_date: editDate || undefined,
                             description: editNotes || undefined,
                           };
-                          const paymentId = selectedPayment?.id ?? selectedPayment?.raw?.id ?? selectedPayment?.raw?.payment_id ?? selectedPayment?.payment_id ?? null;
+                          // referenceId is the ACTUAL payment record ID
+                          const paymentId = selectedPayment?.referenceId || (selectedPayment?.raw?.payment_id ?? selectedPayment?.raw?.id ?? selectedPayment?.id) || null;
                           if (!paymentId) {
                             toast.error('لا يوجد معرف صالح للسند للحفظ');
                             return;
@@ -868,7 +874,8 @@ export default function SupplierStatement() {
                           toast.success('تم تعديل السند');
                           setIsEditingPayment(false);
                           setSelectedPayment(null);
-                          queryClient.invalidateQueries(['suppliers-statement', id]);
+                          queryClient.invalidateQueries({ queryKey: ['suppliers-statement', id] });
+                          queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
                         } catch (e) {
                           toast.error('فشل حفظ التعديلات');
                         }
