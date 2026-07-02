@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, CalendarDays, Eye, Printer } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { ArrowRight, CalendarDays, Eye, Printer, Edit, XCircle, Trash2 } from 'lucide-react';
+import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { getPurchaseInvoice } from '../../../api/purchaseInvoices';
+import { getPurchaseInvoice, cancelPurchaseInvoice } from '../../../api/purchaseInvoices';
 import { updatePayment, deletePayment } from '../../../api/payments';
 import { getStatement as getSupplierStatement } from '../../../api/suppliers';
 import BalanceDisplay from '../../../components/shared/BalanceDisplay';
@@ -11,7 +11,7 @@ import DataTable from '../../../components/shared/DataTable';
 import LoadingSpinner from '../../../components/shared/LoadingSpinner';
 import PaginationControls from '../../../components/shared/PaginationControls';
 import { Button } from '../../../components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { formatCurrency, formatDate, getBalanceColor } from '../../../utils/formatters';
 import { normalizePaginatedResponse } from '../../../utils/pagination';
@@ -113,6 +113,9 @@ export default function SupplierStatement() {
   const [perPage, setPerPage] = useState(25);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [cancelInvoice, setCancelInvoice] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonError, setCancelReasonError] = useState('');
   const [invoiceDateMap, setInvoiceDateMap] = useState({});
 
   const isPurchaseInvoiceType = (type) => {
@@ -135,6 +138,25 @@ export default function SupplierStatement() {
   });
 
   const queryClient = useQueryClient();
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ id, reason }) => cancelPurchaseInvoice(id, { reason }),
+    onSuccess: () => {
+      toast.success('تم إلغاء الفاتورة بنجاح');
+      setCancelInvoice(null);
+      setCancelReason('');
+      setCancelReasonError('');
+      queryClient.invalidateQueries({ queryKey: ['suppliers-statement', id] });
+    },
+    onError: (error) => {
+      const apiMessage =
+        error?.response?.data?.errors?.reason?.[0] ||
+        error?.response?.data?.message ||
+        'تعذر إلغاء الفاتورة';
+      setCancelReasonError(apiMessage);
+      toast.error(apiMessage);
+    },
+  });
 
   const ensureInvoiceDate = (invoiceId) => {
     if (!invoiceId || invoiceDateMap[invoiceId]) return;
@@ -307,33 +329,94 @@ export default function SupplierStatement() {
     },
     {
       key: 'invoice_action',
-      label: 'الفاتورة',
+      label: 'العمليات',
       render: (_, row) => {
         const type = String(row.referenceType || '').toLowerCase();
 
         if (row.referenceId > 0 && isPurchaseInvoiceType(type)) {
           return (
-            <button
-              type="button"
-              onClick={() => setSelectedInvoice({ id: row.referenceId })}
-              className="rounded-md p-2 text-slate-600 hover:bg-slate-100"
-              title="عرض الفاتورة"
-            >
-              <Eye className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setSelectedInvoice({ id: row.referenceId })}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+                title="عرض الفاتورة"
+              >
+                <Eye className="h-4 w-4" />
+              </button>
+
+              <Link
+                to={`/store/purchase-invoices/${row.referenceId}/edit`}
+                className="rounded-md p-1.5 text-primary hover:bg-primary/10"
+                title="تعديل الفاتورة"
+              >
+                <Edit className="h-4 w-4" />
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelInvoice({ id: row.referenceId, invoice_number: row.invoiceNumber });
+                  setCancelReason('');
+                  setCancelReasonError('');
+                }}
+                className="rounded-md p-1.5 text-red-600 hover:bg-red-50"
+                title="إلغاء الفاتورة"
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            </div>
           );
         }
 
-        if (row.referenceId > 0 && (type.includes('payment') || type.includes('receipt') || type.includes('supplier_payment'))) {
+        if (row.referenceId > 0 && row.isPaymentRow) {
+          const paymentId = row.id ?? row.raw?.id ?? row.raw?.payment_id ?? row.payment_id ?? row.referenceId;
           return (
-            <button
-              type="button"
-              onClick={() => setSelectedPayment(row)}
-              className="rounded-md p-2 text-slate-600 hover:bg-slate-100"
-              title="عرض سند السداد"
-            >
-              <Eye className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setSelectedPayment(row)}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+                title="عرض سند السداد"
+              >
+                <Eye className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPayment(row);
+                  const amount = row.debit || row.credit || row.raw?.amount || 0;
+                  setEditAmount(String(amount));
+                  setEditDate(row.date || row.raw?.date || '');
+                  setEditNotes(row.description || row.raw?.notes || '');
+                  setIsEditingPayment(true);
+                }}
+                className="rounded-md p-1.5 text-primary hover:bg-primary/10"
+                title="تعديل السند"
+              >
+                <Edit className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = window.confirm('هل متأكد من حذف سند الدفع؟ لا يمكن التراجع');
+                  if (!ok) return;
+                  try {
+                    await deletePayment(paymentId, row.referenceType);
+                    toast.success('تم حذف السند');
+                    queryClient.invalidateQueries({ queryKey: ['suppliers-statement', id] });
+                  } catch (e) {
+                    toast.error('فشل حذف السند');
+                  }
+                }}
+                className="rounded-md p-1.5 text-red-600 hover:bg-red-50"
+                title="حذف السند"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           );
         }
 
@@ -652,6 +735,48 @@ export default function SupplierStatement() {
                 loading={invoiceDetailsQuery.isFetching}
                 emptyMessage="لا توجد أصناف"
               />
+
+              <div className="flex justify-end gap-2 pt-2 border-t mt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSelectedInvoice(null)}
+                >
+                  إغلاق
+                </Button>
+
+                {invoiceDetails?.status === 'confirmed' && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        navigate(`/store/purchase-invoices/${selectedInvoice.id}/edit`);
+                        setSelectedInvoice(null);
+                      }}
+                      className="flex items-center gap-1.5"
+                    >
+                      <Edit className="h-4 w-4" />
+                      <span>تعديل</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => {
+                        setCancelInvoice({ id: selectedInvoice.id, invoice_number: invoiceDetails?.invoice_number });
+                        setSelectedInvoice(null);
+                        setCancelReason('');
+                        setCancelReasonError('');
+                      }}
+                      className="flex items-center gap-1.5"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      <span>إلغاء الفاتورة</span>
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
@@ -761,6 +886,70 @@ export default function SupplierStatement() {
           ) : (
             <LoadingSpinner />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(cancelInvoice)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCancelInvoice(null);
+            setCancelReason('');
+            setCancelReasonError('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>إلغاء الفاتورة رقم {cancelInvoice?.invoice_number || `INV-${cancelInvoice?.id || ''}`}</DialogTitle>
+            <DialogDescription>سيتم عكس المخزون والقيود المالية</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-text">سبب الإلغاء *</label>
+            <textarea
+              value={cancelReason}
+              onChange={(event) => {
+                setCancelReason(event.target.value);
+                if (cancelReasonError) setCancelReasonError('');
+              }}
+              rows={4}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              placeholder="اكتب سبب الإلغاء"
+            />
+            {cancelReasonError ? <p className="text-sm text-danger">{cancelReasonError}</p> : null}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCancelInvoice(null);
+                setCancelReason('');
+                setCancelReasonError('');
+              }}
+              disabled={cancelMutation.isPending}
+            >
+              إلغاء
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => {
+                const reason = cancelReason.trim();
+                if (!reason) {
+                  setCancelReasonError('سبب الإلغاء مطلوب');
+                  return;
+                }
+                cancelMutation.mutate({ id: cancelInvoice.id, reason });
+              }}
+              disabled={cancelMutation.isPending}
+              className="bg-danger text-white hover:bg-red-700 focus-visible:ring-danger"
+            >
+              {cancelMutation.isPending ? 'جاري التنفيذ...' : 'تأكيد الإلغاء'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
