@@ -69,7 +69,7 @@ export default function PurchaseInvoiceDetailsPage() {
     <div>
       <PageHeader
         title={`تفاصيل فاتورة شراء #${invoice?.invoice_number || id}`}
-        subtitle={`التاريخ: ${invoice?.date ? formatDate(invoice.date) : '—'}`}
+        subtitle={`التاريخ: ${formatDate(invoice?.invoice_date ?? invoice?.date ?? invoice?.created_at)}`}
         actions={
           <Link to="/store/purchase-invoices" className="w-full sm:w-auto">
             <Button type="button" variant="outline" className="flex items-center gap-2 justify-center w-full">
@@ -85,7 +85,7 @@ export default function PurchaseInvoiceDetailsPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-xl border border-border bg-white p-4 text-sm text-text-muted">
             <div>المورد: <span className="font-semibold text-text">{invoice?.supplier?.name || invoice?.supplier_name || '—'}</span></div>
             <div className="flex items-center gap-1.5">الحالة: <StatusBadge status={invoice?.status || 'confirmed'} /></div>
-            <div>التاريخ: <span className="font-semibold text-text">{invoice?.date ? formatDate(invoice.date) : '—'}</span></div>
+            <div>التاريخ: <span className="font-semibold text-text">{formatDate(invoice?.invoice_date ?? invoice?.date ?? invoice?.created_at)}</span></div>
           </div>
 
           {/* Desktop Items Table */}

@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Eye, EyeOff, Leaf, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { loginApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
@@ -147,6 +148,10 @@ export default function LoginPage() {
                     'دخول'
                   )}
                 </Button>
+
+                <div className="flex items-center justify-between">
+                  <Link to="/forgot-password" className="text-sm text-primary">نسيت كلمة المرور؟</Link>
+                </div>
 
                 {errorMessage ? <p className="text-center text-sm text-danger">{errorMessage}</p> : null}
               </form>

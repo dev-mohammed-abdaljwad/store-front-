@@ -4,7 +4,12 @@ export const formatCurrency = (amount) =>
     maximumFractionDigits: 2,
   }).format(Number(amount) || 0) + ' جنيه';
 
-export const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('ar-EG');
+export const formatDate = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (!isFinite(d.getTime())) return '—';
+  return d.toLocaleDateString('ar-EG');
+};
 
 export const getBalanceColor = (balance) => {
   if (balance > 0) return 'text-red-600';

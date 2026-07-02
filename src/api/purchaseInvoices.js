@@ -21,7 +21,13 @@ export const searchPurchaseInvoices = (search = '', filters = {}) =>
 		},
 	});
 
-export const getPurchaseReturns = () => axios.get('/store/purchase-returns');
+export const getPurchaseReturns = (params = {}) =>
+	axios.get('/store/purchase-returns', {
+		params: {
+			per_page: 50,
+			...params,
+		},
+	});
 export const createPurchaseReturn = (data) => axios.post('/store/purchase-returns', data);
 
 export const uploadPurchaseInvoiceAttachment = (id, formData, config = {}) =>
@@ -33,3 +39,4 @@ export const uploadPurchaseInvoiceAttachment = (id, formData, config = {}) =>
 		...config,
 	});
 export const deletePurchaseInvoiceAttachment = (id) => axios.delete(`/store/purchase-invoices/${id}/attachment`);
+export const deletePurchaseInvoice = (id) => axios.delete(`/store/purchase-invoices/${id}`);

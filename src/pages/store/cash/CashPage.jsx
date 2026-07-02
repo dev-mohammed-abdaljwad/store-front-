@@ -163,7 +163,7 @@ export default function CashPage() {
     {
       key: 'time',
       label: 'الوقت',
-      render: (value, row) => value || row?.created_at?.split('T')?.[1]?.slice(0, 8) || '—',
+      render: (value, row) => value || row?.transaction_date?.split('T')?.[1]?.slice(0, 8) || row?.created_at?.split('T')?.[1]?.slice(0, 8) || '—',
     },
     {
       key: 'type',
@@ -273,7 +273,7 @@ export default function CashPage() {
           columns={columns}
           data={transactions.map((item, index) => ({
             id: item.id ?? index,
-            time: item.time || item.created_at?.split('T')?.[1]?.slice(0, 8),
+            time: item.time || item.transaction_date?.split('T')?.[1]?.slice(0, 8) || item.created_at?.split('T')?.[1]?.slice(0, 8),
             type: item.type || item.transaction_type || item.direction,
             description: item.description || item.notes || (item.date ? formatDate(item.date) : ''),
             amount: item.amount,

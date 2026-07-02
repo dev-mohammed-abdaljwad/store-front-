@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import LoginPage from './pages/auth/LoginPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import ProtectedRoute from './components/shared/ProtectedRoute';
 import AdminLayout from './layouts/AdminLayout';
 import StoreLayout from './layouts/StoreLayout';
@@ -32,6 +34,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/password/reset" element={<ResetPasswordPage />} />
 
           <Route path="/admin" element={<ProtectedRoute role="super_admin" />}>
             <Route element={<AdminLayout />}>

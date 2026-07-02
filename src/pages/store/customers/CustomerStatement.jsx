@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, CalendarDays, Eye, Printer } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getStatement as getCustomerStatement } from '../../../api/customers';
 import { getSalesInvoice } from '../../../api/salesInvoices';
+import { updatePayment, deletePayment } from '../../../api/payments';
 import BalanceDisplay from '../../../components/shared/BalanceDisplay';
 import DataTable from '../../../components/shared/DataTable';
 import LoadingSpinner from '../../../components/shared/LoadingSpinner';
@@ -15,6 +16,23 @@ import { Input } from '../../../components/ui/input';
 import { useAuthStore } from '../../../store/authStore';
 import { formatCurrency, formatDate, getBalanceColor } from '../../../utils/formatters';
 import { normalizePaginatedResponse } from '../../../utils/pagination';
+
+const getTypeLabel = (referenceType) => {
+  const type = String(referenceType || '').toLowerCase();
+  if (type.includes('sales') && type.includes('invoice')) return 'فاتورة بيع';
+  if (type.includes('invoice')) return 'فاتورة';
+  if (type.includes('payment') || type.includes('receipt') || type.includes('customer_payment')) return 'سداد';
+  if (type.includes('credit') && type.includes('note')) return 'إشعار دائن';
+  if (type.includes('debit') && type.includes('note')) return 'إشعار مدين';
+  if (type.includes('journal')) return 'قيد يومية';
+  if (type.includes('opening') || type.includes('initial')) return 'رصيد افتتاحي';
+  return referenceType || '—';
+};
+
+const formatNumber = (num) => {
+  if (!num || num === 0) return '';
+  return new Intl.NumberFormat('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(num));
+};
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -61,11 +79,11 @@ const normalizeStatementResponse = (response) => {
 
   const pagination = statementMeta
     ? {
-        page: toNumber(statementMeta?.current_page ?? statementMeta?.page, 1),
-        perPage: toNumber(statementMeta?.per_page ?? statementMeta?.perPage, rows.length || 25),
-        total: toNumber(statementMeta?.total, rows.length),
-        lastPage: toNumber(statementMeta?.last_page ?? statementMeta?.lastPage, 1),
-      }
+      page: toNumber(statementMeta?.current_page ?? statementMeta?.page, 1),
+      perPage: toNumber(statementMeta?.per_page ?? statementMeta?.perPage, rows.length || 25),
+      total: toNumber(statementMeta?.total, rows.length),
+      lastPage: toNumber(statementMeta?.last_page ?? statementMeta?.lastPage, 1),
+    }
     : normalized.meta;
 
   return {
@@ -96,6 +114,15 @@ export default function CustomerStatement() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [invoiceDateMap, setInvoiceDateMap] = useState({});
+
+  const isSalesInvoiceType = (type) => {
+    const lower = String(type || '').toLowerCase();
+    return (lower.includes('sales') && lower.includes('invoice')) || lower.includes('sales_invoice') || lower.includes('salesinvoice');
+  };
+
+
 
   const statementQuery = useQuery({
     queryKey: ['customers-statement', id, range.from, range.to, page, perPage],
@@ -111,11 +138,52 @@ export default function CustomerStatement() {
     keepPreviousData: true,
   });
 
+  const queryClient = useQueryClient();
+
+  const ensureInvoiceDate = (invoiceId) => {
+    if (!invoiceId || invoiceDateMap[invoiceId]) return;
+    queryClient
+      .fetchQuery(['sales-invoice', invoiceId], () => getSalesInvoice(invoiceId))
+      .then((res) => {
+        const payload = extractInvoicePayload(res) || {};
+        const date = payload?.invoice_date ?? payload?.date ?? null;
+        if (date) setInvoiceDateMap((prev) => ({ ...prev, [invoiceId]: date }));
+      })
+      .catch(() => { });
+  };
+
+  useEffect(() => {
+    const rows = statementQuery.data?.rows || [];
+    const ids = Array.from(
+      new Set(rows.filter((r) => r.referenceId > 0 && isSalesInvoiceType(r.referenceType)).map((r) => r.referenceId))
+    ).filter((id) => !invoiceDateMap[id]);
+
+    if (ids.length === 0) return;
+
+    ids.forEach(async (id) => {
+      try {
+        const res = await getSalesInvoice(id);
+        const payload = extractInvoicePayload(res) || {};
+        const date = payload?.invoice_date ?? payload?.date ?? null;
+        if (date) setInvoiceDateMap((prev) => ({ ...prev, [id]: date }));
+      } catch (e) {
+        // ignore missing invoice
+      }
+    });
+  }, [statementQuery.data?.rows, invoiceDateMap]);
+
   const invoiceDetailsQuery = useQuery({
     queryKey: ['customer-statement-invoice', selectedInvoice?.id],
     queryFn: async () => extractInvoicePayload(await getSalesInvoice(selectedInvoice.id)),
     enabled: Boolean(selectedInvoice?.id),
   });
+
+  useEffect(() => {
+    const data = invoiceDetailsQuery.data;
+    if (!data || !selectedInvoice?.id) return;
+    const date = data?.invoice_date ?? data?.date ?? null;
+    if (date) setInvoiceDateMap((prev) => ({ ...prev, [selectedInvoice.id]: date }));
+  }, [invoiceDetailsQuery.data, selectedInvoice?.id]);
 
   const statementRows = useMemo(() => {
     const rows = statementQuery.data?.rows || [];
@@ -140,15 +208,27 @@ export default function CustomerStatement() {
         runningBalance += debit - credit;
       }
 
+      const refType = String(item?.reference_type ?? item?.referenceType ?? '').toLowerCase();
+      const isPaymentRow =
+        refType.includes('payment') || refType.includes('receipt') || refType.includes('customer_payment');
+
+      const date = isPaymentRow
+        ? item?.payment_date ?? item?.transaction_date ?? item?.date ?? null
+        : item?.invoice_date ?? item?.date ?? item?.transaction_date ?? null;
+
       return {
         id: item?.id ?? `row-${index}`,
-        date: item?.date ?? item?.created_at ?? item?.createdAt,
+        date,
         description: item?.description ?? item?.statement ?? item?.notes ?? '—',
         debit,
         credit,
         balance: runningBalance,
         referenceType: item?.reference_type ?? item?.referenceType ?? null,
         referenceId: toNumber(item?.reference_id ?? item?.referenceId, 0),
+        paymentNumber: item?.payment_number ?? item?.receipt_number ?? null,
+        invoiceNumber: item?.invoice_number ?? null,
+        isPaymentRow,
+        raw: item,
       };
     });
   }, [statementQuery.data?.rows]);
@@ -183,7 +263,32 @@ export default function CustomerStatement() {
     {
       key: 'date',
       label: 'التاريخ',
-      render: (value) => (value ? formatDate(value) : '—'),
+      render: (value, row) => {
+        const type = String(row.referenceType || '').toLowerCase();
+
+        // Payment rows: use the date already resolved from payment_date/transaction_date.
+        if (row.isPaymentRow) {
+          return value ? formatDate(value) : '—';
+        }
+
+        // Invoice rows: prefer the invoice's own date fetched separately.
+        if (row.referenceId > 0 && isSalesInvoiceType(type)) {
+          if (invoiceDateMap[row.referenceId]) return formatDate(invoiceDateMap[row.referenceId]);
+          ensureInvoiceDate(row.referenceId);
+          return '—';
+        }
+
+        return value ? formatDate(value) : '—';
+      },
+    },
+    {
+      key: 'reference_number',
+      label: 'الرقم',
+      render: (_, row) => {
+        return row.isPaymentRow 
+          ? (row.paymentNumber || row.referenceId || '—')
+          : (row.invoiceNumber || row.referenceId || '—');
+      },
     },
     {
       key: 'description',
@@ -208,27 +313,46 @@ export default function CustomerStatement() {
       key: 'invoice_action',
       label: 'الفاتورة',
       render: (_, row) => {
-        const isInvoiceReference =
-          row.referenceId > 0 && typeof row.referenceType === 'string' && row.referenceType.includes('sales_invoice');
+        const type = String(row.referenceType || '').toLowerCase();
 
-        if (!isInvoiceReference) return '—';
+        if (row.referenceId > 0 && isSalesInvoiceType(type)) {
+          return (
+            <button
+              type="button"
+              onClick={() => setSelectedInvoice({ id: row.referenceId })}
+              className="rounded-md p-2 text-slate-600 hover:bg-slate-100"
+              title="عرض الفاتورة"
+            >
+              <Eye className="h-4 w-4" />
+            </button>
+          );
+        }
 
-        return (
-          <button
-            type="button"
-            onClick={() => setSelectedInvoice({ id: row.referenceId })}
-            className="rounded-md p-2 text-slate-600 hover:bg-slate-100"
-            title="عرض الفاتورة"
-          >
-            <Eye className="h-4 w-4" />
-          </button>
-        );
+        if (row.referenceId > 0 && (type.includes('payment') || type.includes('receipt') || type.includes('customer_payment'))) {
+          return (
+            <button
+              type="button"
+              onClick={() => setSelectedPayment(row)}
+              className="rounded-md p-2 text-slate-600 hover:bg-slate-100"
+              title="عرض سند التحصيل"
+            >
+              <Eye className="h-4 w-4" />
+            </button>
+          );
+        }
+
+        return '—';
       },
     },
   ];
 
   const invoiceDetails = invoiceDetailsQuery.data || {};
   const invoiceItems = Array.isArray(invoiceDetails?.items) ? invoiceDetails.items : [];
+
+  const [isEditingPayment, setIsEditingPayment] = useState(false);
+  const [editAmount, setEditAmount] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   const invoiceItemsColumns = [
     {
@@ -261,24 +385,173 @@ export default function CustomerStatement() {
     <div className="space-y-4 print-area">
       <style>
         {`@media print {
-          .no-print { display: none !important; }
+          .no-print, .screen-only { display: none !important; }
           .print-only { display: block !important; }
-          .print-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
-          body { background: #fff !important; }
+          .print-card { box-shadow: none !important; border: none !important; }
+          body { background: #fff !important; margin: 0 !important; padding: 0 !important; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif !important; }
+          .print-area { padding: 0 !important; gap: 0 !important; }
+          * { box-shadow: none !important; }
+
+          .print-report { display: block !important; direction: rtl; }
+          .print-report-header { text-align: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #333; }
+          .print-report-header h1 { font-size: 18px; font-weight: bold; margin: 0 0 2px 0; }
+          .print-report-header h2 { font-size: 15px; font-weight: bold; margin: 0 0 2px 0; }
+          .print-report-header p { font-size: 11px; margin: 0; color: #555; }
+
+          .print-report table { width: 100%; border-collapse: collapse; font-size: 11px; }
+          .print-report thead th {
+            border-top: 1px solid #999;
+            border-bottom: 1px solid #999;
+            padding: 5px 8px;
+            text-align: right;
+            font-weight: bold;
+            font-size: 11px;
+            background: transparent;
+          }
+          .print-report thead th.col-num { text-align: center; }
+          .print-report thead th.col-debit,
+          .print-report thead th.col-credit,
+          .print-report thead th.col-balance { text-align: left; }
+
+          .print-report tbody td {
+            padding: 3px 8px;
+            border: none;
+            font-size: 11px;
+            vertical-align: top;
+          }
+          .print-report tbody td.col-num { text-align: center; }
+          .print-report tbody td.col-debit,
+          .print-report tbody td.col-credit,
+          .print-report tbody td.col-balance { text-align: left; font-variant-numeric: tabular-nums; }
+
+          .print-report .group-header td {
+            font-weight: bold;
+            padding-top: 8px;
+            padding-bottom: 2px;
+            font-size: 11px;
+          }
+          .print-report .indent-1 td:first-child { padding-right: 24px; }
+          .print-report .indent-2 td:first-child { padding-right: 40px; }
+
+          .print-report .total-row td {
+            border-top: 1px solid #999;
+            border-bottom: 1px solid #999;
+            font-weight: bold;
+            padding-top: 5px;
+            padding-bottom: 5px;
+          }
+          .print-report .subtotal-row td {
+            border-top: 1px solid #ccc;
+            font-weight: bold;
+            padding-top: 4px;
+            padding-bottom: 4px;
+          }
+          .print-report .grand-total-row td {
+            border-top: 2px solid #333;
+            border-bottom: 2px solid #333;
+            font-weight: bold;
+            padding-top: 6px;
+            padding-bottom: 6px;
+            font-size: 12px;
+          }
+
+          @page { margin: 15mm 10mm; size: A4; }
         }`}
       </style>
 
-      <div className="print-only mb-8 hidden text-center">
-        {store?.logo_url ? (
-          <img src={store.logo_url} alt="شعار المتجر" className="mx-auto mb-2 h-16 object-contain" />
-        ) : null}
-        <h1 className="text-2xl font-bold">{store?.print_header || store?.name || 'المتجر'}</h1>
-        {store?.print_phone ? <p>{store.print_phone}</p> : null}
-        {store?.print_address ? <p>{store.print_address}</p> : null}
+      {/* ===== PRINT-ONLY REPORT (QuickBooks style) ===== */}
+      <div className="print-report" style={{ display: 'none' }}>
+        <div className="print-report-header">
+          {store?.logo_url ? (
+            <img src={store.logo_url} alt="شعار" style={{ height: 48, margin: '0 auto 6px', display: 'block', objectFit: 'contain' }} />
+          ) : null}
+          <h1>{store?.print_header || store?.name || 'المتجر'}</h1>
+          <h2>كشف حساب تفصيلي</h2>
+          <p>حتى {formatDate(range.to)}</p>
+          {store?.print_phone ? <p>هاتف: {store.print_phone}</p> : null}
+          {store?.print_address ? <p>{store.print_address}</p> : null}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: '12%' }}>النوع</th>
+              <th style={{ width: '12%' }}>التاريخ</th>
+              <th className="col-num" style={{ width: '8%' }}>الرقم</th>
+              <th className="col-debit" style={{ width: '15%' }}>مدين</th>
+              <th className="col-credit" style={{ width: '15%' }}>دائن</th>
+              <th className="col-balance" style={{ width: '15%' }}>الرصيد</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Opening balance row */}
+            {statementRows.length > 0 && (() => {
+              const firstRow = statementRows[0];
+              const openingBalance = firstRow.balance - firstRow.debit + firstRow.credit;
+              return openingBalance !== 0 ? (
+                <tr className="group-header">
+                  <td colSpan="5"></td>
+                  <td className="col-balance">{formatNumber(openingBalance)}</td>
+                </tr>
+              ) : null;
+            })()}
+            {/* Customer group header */}
+            <tr className="group-header">
+              <td colSpan="6" style={{ paddingRight: 8 }}>{customerName}</td>
+            </tr>
+
+            {/* Transaction rows */}
+            {statementRows.map((row) => {
+              const dateVal = (() => {
+                // Payment rows: date already resolved from payment_date/transaction_date.
+                if (row.isPaymentRow) {
+                  return row.date ? formatDate(row.date) : '—';
+                }
+                // Invoice rows: prefer fetched invoice date.
+                if (row.referenceId > 0 && isSalesInvoiceType(String(row.referenceType || ''))) {
+                  if (invoiceDateMap[row.referenceId]) return formatDate(invoiceDateMap[row.referenceId]);
+                }
+                return row.date ? formatDate(row.date) : '—';
+              })();
+
+              return (
+                <tr key={row.id} className="indent-1">
+                  <td>{getTypeLabel(row.referenceType)}</td>
+                  <td>{dateVal}</td>
+                  <td className="col-num">
+                    {row.isPaymentRow 
+                      ? (row.paymentNumber || row.referenceId)
+                      : (row.invoiceNumber || row.referenceId || '')}
+                  </td>
+                  <td className="col-debit">{formatNumber(row.debit)}</td>
+                  <td className="col-credit">{formatNumber(row.credit)}</td>
+                  <td className="col-balance">{formatNumber(row.balance)}</td>
+                </tr>
+              );
+            })}
+
+            {/* Customer subtotal */}
+            <tr className="subtotal-row indent-1">
+              <td colSpan="3">إجمالي {customerName}</td>
+              <td className="col-debit">{formatNumber(totals.debit)}</td>
+              <td className="col-credit">{formatNumber(totals.credit)}</td>
+              <td className="col-balance">{formatNumber(totals.closing)}</td>
+            </tr>
+
+            {/* Grand total */}
+            <tr className="grand-total-row">
+              <td colSpan="3">الإجمالي</td>
+              <td className="col-debit">{formatNumber(totals.debit)}</td>
+              <td className="col-credit">{formatNumber(totals.credit)}</td>
+              <td className="col-balance">{formatNumber(totals.closing)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div className="rounded-xl border border-border bg-white p-4 print-card">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 no-print">
+      {/* ===== SCREEN-ONLY SECTIONS ===== */}
+      <div className="screen-only rounded-xl border border-border bg-white p-4 print-card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex items-center gap-2">
             <ArrowRight className="h-4 w-4" />
             <span>رجوع</span>
@@ -295,7 +568,7 @@ export default function CustomerStatement() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-white p-4 no-print print-card">
+      <div className="screen-only rounded-xl border border-border bg-white p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-text">من</label>
@@ -329,11 +602,13 @@ export default function CustomerStatement() {
         </div>
       </div>
 
-      {statementQuery.isLoading ? (
-        <LoadingSpinner />
-      ) : (
-        <DataTable columns={columns} data={statementRows} loading={statementQuery.isFetching} emptyMessage="لا توجد حركات" />
-      )}
+      <div className="screen-only">
+        {statementQuery.isLoading ? (
+          <LoadingSpinner />
+        ) : (
+          <DataTable columns={columns} data={statementRows} loading={statementQuery.isFetching} emptyMessage="لا توجد حركات" />
+        )}
+      </div>
 
       <PaginationControls
         className="no-print"
@@ -348,7 +623,7 @@ export default function CustomerStatement() {
         }}
       />
 
-      <div className="rounded-xl border border-border bg-white p-4 text-sm print-card">
+      <div className="screen-only rounded-xl border border-border bg-white p-4 text-sm">
         <div className="flex flex-wrap items-center gap-4">
           <span>الإجمالي مدين: {formatCurrency(totals.debit)}</span>
           <span>الإجمالي دائن: {formatCurrency(totals.credit)}</span>
@@ -376,7 +651,7 @@ export default function CustomerStatement() {
             <div className="space-y-4">
               <div className="grid gap-2 rounded-lg border border-border bg-bg p-3 text-sm text-text-muted md:grid-cols-2">
                 <div>العميل: {invoiceDetails?.customer?.name || invoiceDetails?.customer_name || customerName || '—'}</div>
-                <div>التاريخ: {invoiceDetails?.invoice_date ? formatDate(invoiceDetails.invoice_date) : '—'}</div>
+                <div>التاريخ: {formatDate(invoiceDetails?.invoice_date ?? invoiceDetails?.date ?? null)}</div>
                 <div>الإجمالي: {formatCurrency(invoiceDetails?.total_amount || 0)}</div>
                 <div>المدفوع: {formatCurrency(invoiceDetails?.paid_amount || 0)}</div>
               </div>
@@ -388,6 +663,113 @@ export default function CustomerStatement() {
                 emptyMessage="لا توجد أصناف"
               />
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(selectedPayment)} onOpenChange={(open) => !open && setSelectedPayment(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>تفاصيل سند التحصيل</DialogTitle>
+          </DialogHeader>
+
+          {selectedPayment ? (
+            <div className="space-y-3">
+              {!isEditingPayment ? (
+                <>
+                  <div className="text-sm">البيان: {selectedPayment.description || selectedPayment.raw?.notes || '—'}</div>
+                  <div className="text-sm">التاريخ: {formatDate(selectedPayment.date)}</div>
+                  <div className="text-sm">المبلغ: {formatCurrency(selectedPayment.debit || selectedPayment.credit || selectedPayment.raw?.amount || 0)}</div>
+                  <div className="text-sm">مرجع الفاتورة: {selectedPayment.referenceId ? `#${selectedPayment.referenceId}` : '—'}</div>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const amount = selectedPayment.debit || selectedPayment.credit || selectedPayment.raw?.amount || 0;
+                        setEditAmount(String(amount));
+                        setEditDate(selectedPayment.date || selectedPayment.raw?.date || '');
+                        setEditNotes(selectedPayment.description || selectedPayment.raw?.notes || '');
+                        setIsEditingPayment(true);
+                      }}
+                    >
+                      تعديل
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={async () => {
+                        const ok = window.confirm('هل متأكد من حذف سند التحصيل؟ لا يمكن التراجع');
+                        if (!ok) return;
+                        const paymentId = selectedPayment?.id ?? selectedPayment?.raw?.id ?? selectedPayment?.raw?.payment_id ?? selectedPayment?.payment_id ?? null;
+                        if (!paymentId) {
+                          toast.error('لا يوجد معرف صالح للسند للحذف');
+                          return;
+                        }
+                        try {
+                          await deletePayment(paymentId, selectedPayment.referenceType);
+                          toast.success('تم حذف السند');
+                          setSelectedPayment(null);
+                          queryClient.invalidateQueries(['customers-statement', id]);
+                        } catch (e) {
+                          toast.error('فشل حذف السند');
+                        }
+                      }}
+                    >
+                      حذف
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="grid gap-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-text">المبلغ</label>
+                    <Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-text">التاريخ</label>
+                    <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-text">البيان</label>
+                    <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const payload = {
+                            amount: Number(editAmount) || 0,
+                            transaction_date: editDate || undefined,
+                            description: editNotes || undefined,
+                          };
+                          const paymentId = selectedPayment?.id ?? selectedPayment?.raw?.id ?? selectedPayment?.raw?.payment_id ?? selectedPayment?.payment_id ?? null;
+                          if (!paymentId) {
+                            toast.error('لا يوجد معرف صالح للسند للحفظ');
+                            return;
+                          }
+                          await updatePayment(paymentId, payload, selectedPayment.referenceType);
+                          toast.success('تم تعديل السند');
+                          setIsEditingPayment(false);
+                          setSelectedPayment(null);
+                          queryClient.invalidateQueries(['customers-statement', id]);
+                        } catch (e) {
+                          toast.error('فشل حفظ التعديلات');
+                        }
+                      }}
+                    >
+                      حفظ
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setIsEditingPayment(false)}>
+                      إلغاء
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <LoadingSpinner />
           )}
         </DialogContent>
       </Dialog>

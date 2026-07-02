@@ -1,7 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO, startOfMonth, subDays } from 'date-fns';
-import { AlertTriangle, Banknote, FileText, ShoppingCart, TrendingUp, Users } from 'lucide-react';
+import {
+  AlertTriangle,
+  Banknote,
+  FileText,
+  ShoppingCart,
+  TrendingUp,
+  Users,
+  Wallet,
+  CreditCard,
+} from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -24,6 +33,7 @@ import { getInventoryDeficits } from '../../../api/inventory';
 import { getProducts } from '../../../api/products';
 import { getPurchaseInvoices } from '../../../api/purchaseInvoices';
 import { getSalesInvoices } from '../../../api/salesInvoices';
+import { getAllCustomerPayments } from '../../../api/payments';
 import LoadingSpinner from '../../../components/shared/LoadingSpinner';
 import PageHeader from '../../../components/shared/PageHeader';
 import StatusBadge from '../../../components/shared/StatusBadge';
@@ -67,7 +77,7 @@ const normalizeDateKey = (value) => {
   }
 };
 
-const getInvoiceDate = (invoice) => invoice?.invoice_date || invoice?.date || invoice?.created_at || null;
+const getInvoiceDate = (invoice) => invoice?.invoice_date || invoice?.date || invoice?.sort_date || invoice?.created_at || null;
 const getInvoiceStatus = (invoice) => String(invoice?.status || '').toLowerCase();
 const isConfirmedInvoice = (invoice) => {
   const status = getInvoiceStatus(invoice);
@@ -205,6 +215,32 @@ const isLowStockVariant = (variant) => {
   return threshold > 0 && stock <= threshold;
 };
 
+// Extract payment amount from various field names
+const getPaymentAmount = (payment) =>
+  toNumber(payment?.amount ?? payment?.paid_amount ?? payment?.payment_amount ?? 0, 0);
+
+// Extract payment date from various field names
+const getPaymentDate = (payment) =>
+  payment?.payment_date ?? payment?.date ?? payment?.paid_at ?? payment?.created_at ?? null;
+
+// Group payments by customer and sum amounts
+const buildTopCollectors = (payments, count = 5) => {
+  const map = new Map();
+  payments.forEach((p) => {
+    const customerId = p?.customer_id ?? p?.customer?.id;
+    if (!customerId) return;
+    const name = p?.customer?.name ?? p?.customer_name ?? `عميل #${customerId}`;
+    const amount = getPaymentAmount(p);
+    if (amount <= 0) return;
+    if (map.has(customerId)) {
+      map.get(customerId).total += amount;
+    } else {
+      map.set(customerId, { id: customerId, name, total: amount });
+    }
+  });
+  return [...map.values()].sort((a, b) => b.total - a.total).slice(0, count);
+};
+
 function SkeletonCard() {
   return (
     <div className="w-full rounded-xl border border-border bg-white p-5 animate-pulse">
@@ -261,6 +297,203 @@ function TableSkeletonRows() {
   );
 }
 
+// ─── Invoices Summary Table ───────────────────────────────────────────────────
+function InvoiceSummaryTable({ title, invoices, type, isLoading, onViewAll, navigatePath }) {
+  const navigate = useNavigate();
+  const borderColor = type === 'sales' ? 'border-emerald-200' : 'border-sky-200';
+  const emptyMsg = type === 'sales' ? 'لا توجد فواتير بيع' : 'لا توجد فواتير شراء';
+
+  return (
+    <div className={`rounded-xl border ${borderColor} bg-white p-4`}>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-semibold text-text">{title}</h3>
+        <button
+          type="button"
+          onClick={() => navigate(navigatePath)}
+          className="text-sm font-semibold text-primary"
+        >
+          عرض الكل →
+        </button>
+      </div>
+
+      {isLoading ? (
+        <TableSkeletonRows />
+      ) : invoices.length === 0 ? (
+        <p className="rounded-lg bg-bg px-3 py-2 text-sm text-text-muted">{emptyMsg}</p>
+      ) : (
+        <div className="space-y-2 text-sm">
+          {invoices.map((invoice) => (
+            <button
+              key={invoice?.id}
+              type="button"
+              onClick={() => navigate(navigatePath)}
+              className="grid w-full grid-cols-12 items-center rounded-lg border border-border px-3 py-2 text-right hover:bg-bg"
+            >
+              <span className="col-span-3 font-mono font-semibold text-text">
+                {invoice?.invoice_number || `#${invoice?.id}`}
+              </span>
+              <span className="col-span-4 truncate text-text-muted">
+                {type === 'sales'
+                  ? invoice?.customer?.name || invoice?.customer_name || '—'
+                  : invoice?.supplier?.name || invoice?.supplier_name || '—'}
+              </span>
+              <span className="col-span-3 font-semibold text-text">
+                {formatCurrency(getInvoiceTotal(invoice))}
+              </span>
+              <span className="col-span-2 flex justify-end">
+                <StatusBadge status={invoice?.status || 'confirmed'} />
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Invoices Panel: today + week tabs ────────────────────────────────────────
+function InvoicesPanelSection({
+  salesTodayInvoices,
+  purchasesTodayInvoices,
+  sales7Invoices,
+  purchases7Invoices,
+  salesTodayLoading,
+  purTodayLoading,
+  sales7Loading,
+  pur7Loading,
+}) {
+  const [period, setPeriod] = useState('today'); // 'today' | 'week'
+  const [type, setType] = useState('sales'); // 'sales' | 'purchases'
+
+  const invoices =
+    period === 'today'
+      ? type === 'sales'
+        ? salesTodayInvoices
+        : purchasesTodayInvoices
+      : type === 'sales'
+        ? sales7Invoices
+        : purchases7Invoices;
+
+  const isLoading =
+    period === 'today'
+      ? type === 'sales'
+        ? salesTodayLoading
+        : purTodayLoading
+      : type === 'sales'
+        ? sales7Loading
+        : pur7Loading;
+
+  const navigatePath = type === 'sales' ? '/store/sales-invoices' : '/store/purchase-invoices';
+  const navigate = useNavigate();
+
+  const sorted = [...invoices]
+    .sort((a, b) => (getInvoiceDate(b) || '').localeCompare(getInvoiceDate(a) || ''))
+    .slice(0, 8);
+
+  const totalAmount = sumConfirmedInvoices(invoices);
+  const label = type === 'sales' ? 'فواتير بيع' : 'فواتير شراء';
+  const borderColor = type === 'sales' ? 'border-emerald-200' : 'border-sky-200';
+  const totalColor = type === 'sales' ? 'text-emerald-700' : 'text-sky-700';
+
+  return (
+    <div className={`rounded-xl border ${borderColor} bg-white p-4`}>
+      {/* Header */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold text-text">📄 {label}</h3>
+        <button
+          type="button"
+          onClick={() => navigate(navigatePath)}
+          className="text-sm font-semibold text-primary"
+        >
+          عرض الكل →
+        </button>
+      </div>
+
+      {/* Period + Type tabs */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {/* Period tabs */}
+        <div className="inline-flex overflow-hidden rounded-lg border border-border text-xs">
+          <button
+            type="button"
+            onClick={() => setPeriod('today')}
+            className={`px-3 py-1.5 ${period === 'today' ? 'bg-primary text-white' : 'text-text-muted hover:bg-bg'}`}
+          >
+            اليوم
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriod('week')}
+            className={`border-r border-border px-3 py-1.5 ${period === 'week' ? 'bg-primary text-white' : 'text-text-muted hover:bg-bg'}`}
+          >
+            آخر 7 أيام
+          </button>
+        </div>
+
+        {/* Type tabs */}
+        <div className="inline-flex overflow-hidden rounded-lg border border-border text-xs">
+          <button
+            type="button"
+            onClick={() => setType('sales')}
+            className={`px-3 py-1.5 ${type === 'sales' ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'}`}
+          >
+            بيع
+          </button>
+          <button
+            type="button"
+            onClick={() => setType('purchases')}
+            className={`border-r border-border px-3 py-1.5 ${type === 'purchases' ? 'bg-sky-600 text-white' : 'text-sky-700 hover:bg-sky-50'}`}
+          >
+            شراء
+          </button>
+        </div>
+      </div>
+
+      {/* Total summary */}
+      {!isLoading && (
+        <div className="mb-3 flex items-center justify-between rounded-lg bg-bg px-3 py-2 text-sm">
+          <span className="text-text-muted">
+            {invoices.length.toLocaleString('ar-EG')} فاتورة
+          </span>
+          <span className={`font-bold ${totalColor}`}>{formatCurrency(totalAmount)}</span>
+        </div>
+      )}
+
+      {/* Table */}
+      {isLoading ? (
+        <TableSkeletonRows />
+      ) : sorted.length === 0 ? (
+        <p className="rounded-lg bg-bg px-3 py-2 text-sm text-text-muted">لا توجد فواتير في هذه الفترة</p>
+      ) : (
+        <div className="space-y-2 text-sm">
+          {sorted.map((invoice) => (
+            <button
+              key={invoice?.id}
+              type="button"
+              onClick={() => navigate(navigatePath)}
+              className="grid w-full grid-cols-12 items-center rounded-lg border border-border px-3 py-2 text-right hover:bg-bg"
+            >
+              <span className="col-span-3 font-mono font-semibold text-text">
+                {invoice?.invoice_number || `#${invoice?.id}`}
+              </span>
+              <span className="col-span-4 truncate text-text-muted">
+                {type === 'sales'
+                  ? invoice?.customer?.name || invoice?.customer_name || '—'
+                  : invoice?.supplier?.name || invoice?.supplier_name || '—'}
+              </span>
+              <span className="col-span-3 font-semibold text-text">
+                {formatCurrency(getInvoiceTotal(invoice))}
+              </span>
+              <span className="col-span-2 flex justify-end">
+                <StatusBadge status={invoice?.status || 'confirmed'} />
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function StoreDashboardPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
@@ -269,6 +502,7 @@ export default function StoreDashboardPage() {
   const currentStoreId = Number(store?.id ?? store?.store_id ?? 0) || undefined;
   const { today, weekAgo, monthStart } = useMemo(() => getDailyRange(), []);
 
+  // ── Queries ────────────────────────────────────────────────────────────────
   const cashQ = useQuery({
     queryKey: ['dash-cash'],
     queryFn: getCashBalance,
@@ -297,6 +531,13 @@ export default function StoreDashboardPage() {
     queryKey: ['dash-pur-month', monthStart, today],
     queryFn: () => getPurchaseInvoices(1, { from: monthStart, to: today, per_page: 500 }),
   });
+  const categoryStatsQ = useQuery({
+    queryKey: ['dash-category-stats', monthStart, today],
+    queryFn: () => {
+      const { getSalesCategoryStats } = require('../../../api/salesInvoices');
+      return getSalesCategoryStats({ from: monthStart, to: today });
+    },
+  });
   const customersQ = useQuery({
     queryKey: ['dash-customers'],
     queryFn: () => getCustomers(1, { per_page: 200 }),
@@ -310,6 +551,17 @@ export default function StoreDashboardPage() {
     queryFn: () => getInventoryDeficits({ store_id: currentStoreId }),
   });
 
+  // ── Payments queries ────────────────────────────────────────────────────
+  const paymentsTodayQ = useQuery({
+    queryKey: ['dash-payments-today', today],
+    queryFn: () => getAllCustomerPayments({ from: today, to: today, per_page: 200 }),
+  });
+  const payments7Q = useQuery({
+    queryKey: ['dash-payments-7', weekAgo, today],
+    queryFn: () => getAllCustomerPayments({ from: weekAgo, to: today, per_page: 500 }),
+  });
+
+  // ── Derived values ─────────────────────────────────────────────────────────
   const greetingDate = useMemo(
     () => new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
     []
@@ -332,6 +584,26 @@ export default function StoreDashboardPage() {
   const lowStockProducts = extractList(lowStockQ.data, ['products']);
   const deficitsPayload = extractPayload(deficitsQ.data);
   const deficitsList = extractList(deficitsQ.data, ['deficits']);
+
+  const paymentsToday = extractList(paymentsTodayQ.data, ['payments', 'data']);
+  const payments7 = extractList(payments7Q.data, ['payments', 'data']);
+
+  const categoryStatsPayload = extractPayload(categoryStatsQ.data);
+  const categoryStatsList = Array.isArray(categoryStatsPayload?.categories) ? categoryStatsPayload.categories : [];
+  const grossProfit = toNumber(categoryStatsPayload?.gross_profit);
+  const profitMargin = toNumber(categoryStatsPayload?.gross_profit_margin);
+
+  const pieCategory = useMemo(() => {
+    if (categoryStatsList.length === 0) {
+      return { hasCategoryData: false, data: [] };
+    }
+    const chartData = categoryStatsList.map((item) => ({
+      name: item.category || 'بدون تصنيف',
+      value: toNumber(item.total_sales),
+      percentage: toNumber(item.percentage),
+    }));
+    return { hasCategoryData: true, data: chartData };
+  }, [categoryStatsList]);
 
   const dayKeys = useMemo(() => buildDayKeys(weekAgo, today), [today, weekAgo]);
   const sales7Series = useMemo(() => groupByDay(sales7Invoices, dayKeys), [dayKeys, sales7Invoices]);
@@ -366,7 +638,6 @@ export default function StoreDashboardPage() {
   const salesMonthTotal = sumConfirmedInvoices(salesMonthInvoices);
   const purchasesMonthTotal = sumConfirmedInvoices(purchasesMonthInvoices);
 
-  const pieCategory = useMemo(() => buildSalesCategoriesPie(salesMonthInvoices), [salesMonthInvoices]);
 
   const lowStockRows = useMemo(() => {
     const rows = [];
@@ -406,13 +677,16 @@ export default function StoreDashboardPage() {
 
   const deficitCount = toNumber(deficitsPayload?.total_deficit_items, deficitRows.length || deficitsList.length);
 
-  const latestSalesToday = [...salesTodayInvoices]
-    .sort((a, b) => (getInvoiceDate(b) || '').localeCompare(getInvoiceDate(a) || ''))
-    .slice(0, 5);
-
-  const latestPurchasesToday = [...purchasesTodayInvoices]
-    .sort((a, b) => (getInvoiceDate(b) || '').localeCompare(getInvoiceDate(a) || ''))
-    .slice(0, 5);
+  // ── Payments derived ──────────────────────────────────────────────────────
+  const paymentsTodayTotal = useMemo(
+    () => paymentsToday.reduce((sum, p) => sum + getPaymentAmount(p), 0),
+    [paymentsToday]
+  );
+  const payments7Total = useMemo(
+    () => payments7.reduce((sum, p) => sum + getPaymentAmount(p), 0),
+    [payments7]
+  );
+  const topCollectors7 = useMemo(() => buildTopCollectors(payments7, 5), [payments7]);
 
   const cardsLoading = cashQ.isLoading || salesTodayQ.isLoading || purTodayQ.isLoading || customersQ.isLoading;
 
@@ -420,9 +694,11 @@ export default function StoreDashboardPage() {
     <div>
       <PageHeader title="لوحة المتجر" subtitle={`${greetingLabel}، ${displayName} — ${greetingDate}`} />
 
+      {/* ── Stats cards ─────────────────────────────────────────────────── */}
       <div className="mb-5 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         {cardsLoading ? (
           <>
+            <SkeletonCard />
             <SkeletonCard />
             <SkeletonCard />
             <SkeletonCard />
@@ -456,24 +732,78 @@ export default function StoreDashboardPage() {
               colorClass="bg-amber-500"
             />
             <StatsMiniCard
+              title="تحصيلات اليوم"
+              value={formatCurrency(paymentsTodayTotal)}
+              subtitle={paymentsTodayQ.isLoading ? '...' : `${paymentsToday.length.toLocaleString('ar-EG')} عملية`}
+              icon={Wallet}
+              colorClass="bg-teal-600"
+            />
+            <StatsMiniCard
               title="عملاء بديون"
               value={debtCustomersCount.toLocaleString('ar-EG')}
               subtitle={`إجمالي ${formatCurrency(totalDebtAmount)}`}
               icon={Users}
               colorClass="bg-red-600"
             />
-            <StatsMiniCard
-              title="عجز في المخزون"
-              value={deficitCount.toLocaleString('ar-EG')}
-              subtitle="تحتاج فواتير شراء"
-              icon={AlertTriangle}
-              colorClass="bg-rose-600"
-              onClick={() => navigate('/store/inventory')}
-            />
           </>
         )}
       </div>
 
+      {/* ── Collection summary cards ─────────────────────────────────────── */}
+      <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-teal-200 bg-white p-4">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-teal-600">
+              <Wallet className="h-4 w-4 text-white" />
+            </span>
+            <h3 className="font-semibold text-text">تحصيلات اليوم</h3>
+          </div>
+          {paymentsTodayQ.isLoading ? (
+            <div className="h-10 animate-pulse rounded bg-slate-100 mt-2" />
+          ) : (
+            <div className="mt-2">
+              <p className="text-2xl font-bold text-teal-700">{formatCurrency(paymentsTodayTotal)}</p>
+              <p className="text-xs text-text-muted mt-1">{paymentsToday.length.toLocaleString('ar-EG')} عملية تحصيل</p>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-teal-200 bg-white p-4">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-teal-500">
+              <CreditCard className="h-4 w-4 text-white" />
+            </span>
+            <h3 className="font-semibold text-text">تحصيلات آخر 7 أيام</h3>
+          </div>
+          {payments7Q.isLoading ? (
+            <div className="h-10 animate-pulse rounded bg-slate-100 mt-2" />
+          ) : (
+            <div className="mt-2">
+              <p className="text-2xl font-bold text-teal-600">{formatCurrency(payments7Total)}</p>
+              <p className="text-xs text-text-muted mt-1">{payments7.length.toLocaleString('ar-EG')} عملية تحصيل</p>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-red-200 bg-white p-4">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-600">
+              <Users className="h-4 w-4 text-white" />
+            </span>
+            <h3 className="font-semibold text-text">إجمالي الديون</h3>
+          </div>
+          {customersQ.isLoading ? (
+            <div className="h-10 animate-pulse rounded bg-slate-100 mt-2" />
+          ) : (
+            <div className="mt-2">
+              <p className="text-2xl font-bold text-red-700">{formatCurrency(totalDebtAmount)}</p>
+              <p className="text-xs text-text-muted mt-1">{debtCustomersCount.toLocaleString('ar-EG')} عميل لديه دين</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Charts row ──────────────────────────────────────────────────── */}
       <div className="mb-5 grid gap-4 xl:grid-cols-3">
         <ChartContainer title="مبيعات آخر 7 أيام" isLoading={sales7Q.isLoading}>
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -532,7 +862,9 @@ export default function StoreDashboardPage() {
         </ChartContainer>
       </div>
 
+      {/* ── Compare chart + month summary ──────────────────────────────── */}
       <div className="mb-5 grid gap-4 xl:grid-cols-3">
+
         <div className="min-w-0 xl:col-span-2">
           <ChartContainer title="مقارنة المبيعات والمشتريات" isLoading={sales7Q.isLoading || pur7Q.isLoading}>
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -574,15 +906,70 @@ export default function StoreDashboardPage() {
                   <p className="font-bold text-red-700">{formatCurrency(purchasesMonthTotal)}</p>
                 </div>
               </div>
-              <div className="rounded-lg border border-dashed border-border bg-bg px-3 py-4 text-center text-sm text-text-muted">
-                ⏳ تقرير الربح سيتوفر قريباً
+              <div className="rounded-lg border border-dashed border-teal-200 bg-teal-50 px-3 py-4 text-center">
+                <p className="text-xs text-text-muted mb-1">الربح التقريبي (المبيعات - المشتريات)</p>
+                <p className={`text-xl font-bold ${grossProfit >= 0 ? 'text-teal-700' : 'text-rose-700'}`}>
+                  {formatCurrency(grossProfit)}
+                </p>
+                <p className="text-[10px] text-text-muted mt-1">هامش الربح: {profitMargin}%</p>
               </div>
             </div>
           )}
         </div>
       </div>
 
+      {/* ── Invoices panel (today / week, sales / purchases) ────────────── */}
+      <div className="mb-5 grid gap-4 md:grid-cols-2">
+        <InvoicesPanelSection
+          salesTodayInvoices={salesTodayInvoices}
+          purchasesTodayInvoices={purchasesTodayInvoices}
+          sales7Invoices={sales7Invoices}
+          purchases7Invoices={purchases7Invoices}
+          salesTodayLoading={salesTodayQ.isLoading}
+          purTodayLoading={purTodayQ.isLoading}
+          sales7Loading={sales7Q.isLoading}
+          pur7Loading={pur7Q.isLoading}
+        />
+
+        {/* Top collecting customers */}
+        <div className="rounded-xl border border-teal-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-semibold text-text">💰 أكثر العملاء تحصيلاً (7 أيام)</h3>
+            <button
+              type="button"
+              onClick={() => navigate('/store/customers')}
+              className="text-sm font-semibold text-primary"
+            >
+              عرض الكل →
+            </button>
+          </div>
+
+          {payments7Q.isLoading ? (
+            <TableSkeletonRows />
+          ) : topCollectors7.length === 0 ? (
+            <p className="rounded-lg bg-bg px-3 py-2 text-sm text-text-muted">لا توجد تحصيلات في آخر 7 أيام</p>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {topCollectors7.map((collector, index) => (
+                <div
+                  key={collector.id}
+                  className="grid grid-cols-12 items-center rounded-lg border border-border px-3 py-2"
+                >
+                  <span className="col-span-1 font-bold text-text-muted text-xs">{index + 1}</span>
+                  <span className="col-span-7 truncate text-text">{collector.name}</span>
+                  <span className="col-span-4 font-mono font-bold text-teal-700 text-left">
+                    {formatCurrency(collector.total)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Bottom tables ────────────────────────────────────────────────── */}
       <div className="grid gap-4 md:grid-cols-2">
+        {/* Stock alerts */}
         <div className="rounded-xl border border-amber-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-semibold text-text">تنبيهات المخزون</h3>
@@ -618,25 +1005,26 @@ export default function StoreDashboardPage() {
             <div className="space-y-2 text-sm">
               {stockAlertTab === 'low'
                 ? lowStockRows.map((row) => (
-                    <div key={row.id} className="grid grid-cols-12 items-center rounded-lg border border-border px-3 py-2">
-                      <p className="col-span-6 truncate text-text">{row.productLabel}</p>
-                      <p className="col-span-3 text-center font-bold text-red-600">{row.available.toLocaleString('ar-EG')}</p>
-                      <p className="col-span-3 text-left text-text-muted">{row.limit.toLocaleString('ar-EG')}</p>
-                    </div>
-                  ))
+                  <div key={row.id} className="grid grid-cols-12 items-center rounded-lg border border-border px-3 py-2">
+                    <p className="col-span-6 truncate text-text">{row.productLabel}</p>
+                    <p className="col-span-3 text-center font-bold text-red-600">{row.available.toLocaleString('ar-EG')}</p>
+                    <p className="col-span-3 text-left text-text-muted">{row.limit.toLocaleString('ar-EG')}</p>
+                  </div>
+                ))
                 : deficitRows.map((row) => (
-                    <div key={row.id} className="grid grid-cols-12 items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                      <p className="col-span-8 truncate text-text">{row.productLabel}</p>
-                      <p className="col-span-4 text-left font-bold text-red-700">عجز {row.deficit.toLocaleString('ar-EG')}</p>
-                    </div>
-                  ))}
+                  <div key={row.id} className="grid grid-cols-12 items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                    <p className="col-span-8 truncate text-text">{row.productLabel}</p>
+                    <p className="col-span-4 text-left font-bold text-red-700">عجز {row.deficit.toLocaleString('ar-EG')}</p>
+                  </div>
+                ))}
             </div>
           )}
         </div>
 
+        {/* Top debt customers */}
         <div className="rounded-xl border border-red-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold text-text">👥 عملاء بأعلى دين</h3>
+            <h3 className="font-semibold text-text">👥 أكثر العملاء ديناً</h3>
             <button type="button" onClick={() => navigate('/store/customers')} className="text-sm font-semibold text-primary">
               عرض الكل →
             </button>
@@ -648,7 +1036,7 @@ export default function StoreDashboardPage() {
             <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">✅ لا يوجد عملاء بديون</p>
           ) : (
             <div className="space-y-2 text-sm">
-              {debtCustomers.slice(0, 5).map((customer) => (
+              {debtCustomers.slice(0, 5).map((customer, index) => (
                 <button
                   key={customer.id}
                   type="button"
@@ -659,82 +1047,9 @@ export default function StoreDashboardPage() {
                   }
                   className="grid w-full grid-cols-12 items-center rounded-lg border border-border px-3 py-2 text-right hover:bg-bg"
                 >
+                  <span className="col-span-1 font-bold text-text-muted text-xs">{index + 1}</span>
                   <span className="col-span-7 truncate text-text">{customer?.name || '—'}</span>
-                  <span className="col-span-5 font-mono font-bold text-red-600">{formatCurrency(toNumber(customer?.balance))}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-emerald-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold text-text">آخر 5 فواتير بيع</h3>
-            <button
-              type="button"
-              onClick={() => navigate('/store/sales-invoices')}
-              className="text-sm font-semibold text-primary"
-            >
-              عرض الكل →
-            </button>
-          </div>
-
-          {salesTodayQ.isLoading ? (
-            <TableSkeletonRows />
-          ) : latestSalesToday.length === 0 ? (
-            <p className="rounded-lg bg-bg px-3 py-2 text-sm text-text-muted">لا توجد فواتير بيع اليوم</p>
-          ) : (
-            <div className="space-y-2 text-sm">
-              {latestSalesToday.map((invoice) => (
-                <button
-                  key={invoice?.id}
-                  type="button"
-                  onClick={() => navigate('/store/sales-invoices')}
-                  className="grid w-full grid-cols-12 items-center rounded-lg border border-border px-3 py-2 text-right hover:bg-bg"
-                >
-                  <span className="col-span-3 font-mono font-semibold text-text">{invoice?.invoice_number || `#${invoice?.id}`}</span>
-                  <span className="col-span-4 truncate text-text-muted">{invoice?.customer?.name || invoice?.customer_name || '—'}</span>
-                  <span className="col-span-3 font-semibold text-text">{formatCurrency(getInvoiceTotal(invoice))}</span>
-                  <span className="col-span-2 flex justify-end">
-                    <StatusBadge status={invoice?.status || 'confirmed'} />
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-sky-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold text-text">آخر 5 فواتير شراء</h3>
-            <button
-              type="button"
-              onClick={() => navigate('/store/purchase-invoices')}
-              className="text-sm font-semibold text-primary"
-            >
-              عرض الكل →
-            </button>
-          </div>
-
-          {purTodayQ.isLoading ? (
-            <TableSkeletonRows />
-          ) : latestPurchasesToday.length === 0 ? (
-            <p className="rounded-lg bg-bg px-3 py-2 text-sm text-text-muted">لا توجد فواتير شراء اليوم</p>
-          ) : (
-            <div className="space-y-2 text-sm">
-              {latestPurchasesToday.map((invoice) => (
-                <button
-                  key={invoice?.id}
-                  type="button"
-                  onClick={() => navigate('/store/purchase-invoices')}
-                  className="grid w-full grid-cols-12 items-center rounded-lg border border-border px-3 py-2 text-right hover:bg-bg"
-                >
-                  <span className="col-span-3 font-mono font-semibold text-text">{invoice?.invoice_number || `#${invoice?.id}`}</span>
-                  <span className="col-span-4 truncate text-text-muted">{invoice?.supplier?.name || invoice?.supplier_name || '—'}</span>
-                  <span className="col-span-3 font-semibold text-text">{formatCurrency(getInvoiceTotal(invoice))}</span>
-                  <span className="col-span-2 flex justify-end">
-                    <StatusBadge status={invoice?.status || 'confirmed'} />
-                  </span>
+                  <span className="col-span-4 font-mono font-bold text-red-600">{formatCurrency(toNumber(customer?.balance))}</span>
                 </button>
               ))}
             </div>

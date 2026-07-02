@@ -25,6 +25,7 @@ export default function SearchableSelect({
   renderSelected,
   error,
   disabled,
+  initialSelected,
 }) {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
@@ -64,6 +65,12 @@ export default function SearchableSelect({
       setSelectedCache(null);
     }
   }, [value]);
+
+  useEffect(() => {
+    if (initialSelected && value && Number(initialSelected?.id) === Number(value)) {
+      setSelectedCache(initialSelected);
+    }
+  }, [initialSelected, value]);
 
   const selectedItem = useMemo(() => {
     if (!value) return null;

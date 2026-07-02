@@ -4,6 +4,7 @@ import { Plus, RotateCcw } from 'lucide-react';
 import { getSalesReturns } from '../../../api/salesInvoices';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 import CreateSalesReturnModal from './CreateSalesReturnModal';
+import { Input } from '../../../components/ui/input';
 
 const extractReturns = (response) => {
   const payload = response?.data?.data ?? response?.data ?? [];
@@ -21,11 +22,12 @@ const toNumber = (value) => {
 
 export default function SalesReturnsTab() {
   const [showCreate, setShowCreate] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const queryClient = useQueryClient();
 
   const returnsQuery = useQuery({
-    queryKey: ['sales-returns'],
-    queryFn: getSalesReturns,
+    queryKey: ['sales-returns', searchTerm],
+    queryFn: () => getSalesReturns({ search: searchTerm || undefined }),
   });
 
   const returns = extractReturns(returnsQuery.data);
@@ -38,7 +40,17 @@ export default function SalesReturnsTab() {
           <p className="text-sm text-text-muted">المنتجات المرتجعة من العملاء</p>
         </div>
 
-        <button
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="min-w-0 w-52">
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="بحث برقم الفاتورة..."
+              className="w-full"
+            />
+          </div>
+
+          <button
           type="button"
           onClick={() => setShowCreate(true)}
           className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 w-full sm:w-auto"
@@ -46,6 +58,7 @@ export default function SalesReturnsTab() {
           <Plus size={16} />
           مرتجع جديد
         </button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-white">

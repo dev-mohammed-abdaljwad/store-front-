@@ -21,6 +21,16 @@ export const searchSalesInvoices = (search = '', filters = {}) =>
 		},
 	});
 
-export const getSalesReturns = () => axios.get('/store/sales-returns');
+export const getSalesReturns = (params = {}) =>
+	axios.get('/store/sales-returns', {
+		params: {
+			per_page: 50,
+			...params,
+		},
+	});
 export const createSalesReturn = (data) => axios.post('/store/sales-returns', data);
 export const getSalesRepsStats = () => axios.get('/store/sales-invoices/reps-stats');
+export const deleteSalesInvoice = (id) => axios.delete(`/store/sales-invoices/${id}`);
+export const getSalesCategoryStats = (params = {}) =>
+	axios.get('/store/sales-invoices/category-stats', { params });
+

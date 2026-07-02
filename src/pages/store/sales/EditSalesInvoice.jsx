@@ -220,7 +220,7 @@ export default function EditSalesInvoice() {
       reset({
         invoice_number: invoiceData.invoice_number || '',
         invoice_date: invoiceData.invoice_date || (invoiceData.created_at ? invoiceData.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
-        customer_id: invoiceData.customer_id || 0,
+        customer_id: (invoiceData.customer && invoiceData.customer.id) ? invoiceData.customer.id : (invoiceData.customer_id || 0),
         paid_amount: invoiceData.paid_amount || 0,
         discount_amount: invoiceData.discount_amount || 0,
         notes: invoiceData.notes || '',
@@ -473,6 +473,7 @@ export default function EditSalesInvoice() {
                   placeholder="ابحث عن عميل بالاسم أو الهاتف..."
                   renderOption={(customer) => `${customer.name}${customer.phone ? ` - ${customer.phone}` : ''}`}
                   renderSelected={(customer) => customer.name}
+                    initialSelected={selectedCustomer}
                   error={errors.customer_id?.message}
                 />
                 <input type="hidden" {...register('customer_id')} />

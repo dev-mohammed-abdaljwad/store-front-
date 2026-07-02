@@ -3,11 +3,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, HandCoins, Plus, Search, XCircle, Edit } from 'lucide-react';
+import { Eye, HandCoins, Plus, Search, XCircle, Edit, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getCustomers } from '../../../api/customers';
-import { createCustomerPayment } from '../../../api/payments';
+import { createCustomerPayment, getAllCustomerPayments, getCustomerPayments, updatePayment, deletePayment } from '../../../api/payments';
 import { cancelSalesInvoice, getSalesInvoice, getSalesInvoices, getSalesRepsStats } from '../../../api/salesInvoices';
 import BalanceDisplay from '../../../components/shared/BalanceDisplay';
 import DataTable from '../../../components/shared/DataTable';
@@ -30,6 +30,7 @@ import { normalizePaginatedResponse } from '../../../utils/pagination';
 import SalesReturnsTab from './SalesReturnsTab';
 
 const customerReceiptSchema = z.object({
+  invoice_id: z.coerce.number().optional(),
   party_id: z.coerce.number().min(1, 'العميل مطلوب'),
   amount: z.coerce.number().min(0.01, 'المبلغ يجب أن يكون أكبر من صفر'),
   notes: z.string().optional(),
@@ -66,8 +67,9 @@ const toNumber = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const getInvoiceDate = (invoice) => invoice?.date || invoice?.invoice_date || invoice?.created_at || null;
+const getInvoiceDate = (invoice) => invoice?.invoice_date || invoice?.date || invoice?.sort_date || invoice?.created_at || null;
 const getInvoiceNumber = (invoice) => invoice?.invoice_number || invoice?.number || `INV-${invoice?.id}`;
+const getCustomerId = (invoice) => invoice?.customer?.id || invoice?.customer_id || invoice?.client?.id || invoice?.client_id || 0;
 const getCustomerName = (invoice) =>
   invoice?.customer?.name || invoice?.customer_name || invoice?.client?.name || invoice?.client_name || '—';
 const getInvoiceAmount = (invoice, key) => {
@@ -90,17 +92,17 @@ const normalizeList = (response) => {
 
   const meta = paginationSource
     ? {
-        page: Math.max(1, toNumber(paginationSource?.current_page ?? paginationSource?.page, normalized.meta.page)),
-        perPage: Math.max(1, toNumber(paginationSource?.per_page ?? paginationSource?.perPage, SALES_INVOICES_PER_PAGE)),
-        total: Math.max(0, toNumber(paginationSource?.total, normalized.meta.total)),
-        lastPage: Math.max(
-          1,
-          toNumber(
-            paginationSource?.last_page ?? paginationSource?.lastPage,
-            normalized.meta.lastPage
-          )
-        ),
-      }
+      page: Math.max(1, toNumber(paginationSource?.current_page ?? paginationSource?.page, normalized.meta.page)),
+      perPage: Math.max(1, toNumber(paginationSource?.per_page ?? paginationSource?.perPage, SALES_INVOICES_PER_PAGE)),
+      total: Math.max(0, toNumber(paginationSource?.total, normalized.meta.total)),
+      lastPage: Math.max(
+        1,
+        toNumber(
+          paginationSource?.last_page ?? paginationSource?.lastPage,
+          normalized.meta.lastPage
+        )
+      ),
+    }
     : normalized.meta;
 
   return {
@@ -126,6 +128,7 @@ export default function SalesInvoicesPage() {
     from: '',
     to: '',
   });
+  const [searchTerm, setSearchTerm] = useState('');
   const [detailsInvoiceId, setDetailsInvoiceId] = useState(null);
   const [cancelInvoice, setCancelInvoice] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -133,6 +136,15 @@ export default function SalesInvoicesPage() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [receiptSearchTerm, setReceiptSearchTerm] = useState('');
   const [debouncedReceiptSearchTerm, setDebouncedReceiptSearchTerm] = useState('');
+  const [paymentsCurrentPage, setPaymentsCurrentPage] = useState(1);
+  const [editingPayment, setEditingPayment] = useState(null);
+  const [paymentsModalOpen, setPaymentsModalOpen] = useState(false);
+  useEffect(() => {
+    // debug: track modal open state
+    // eslint-disable-next-line no-console
+    console.log('SalesPaymentsModalOpen=', paymentsModalOpen);
+  }, [paymentsModalOpen]);
+  const [editingSaving, setEditingSaving] = useState(false);
 
   const {
     register: registerReceipt,
@@ -144,6 +156,7 @@ export default function SalesInvoicesPage() {
   } = useForm({
     resolver: zodResolver(customerReceiptSchema),
     defaultValues: {
+      invoice_id: 0,
       party_id: 0,
       amount: '',
       notes: '',
@@ -164,7 +177,7 @@ export default function SalesInvoicesPage() {
   });
 
   const salesInvoicesQuery = useQuery({
-    queryKey: ['sales-invoices', currentPage, filters],
+    queryKey: ['sales-invoices', currentPage, filters, searchTerm],
     queryFn: async () =>
       normalizeList(
         await getSalesInvoices(currentPage, {
@@ -172,10 +185,42 @@ export default function SalesInvoicesPage() {
           customer_id: filters.customer_id || undefined,
           from: filters.from || undefined,
           to: filters.to || undefined,
+          search: searchTerm || undefined,
         })
       ),
     keepPreviousData: true,
   });
+
+  const customerPaymentsQuery = useQuery({
+    queryKey: ['customer-payments', paymentsCurrentPage, searchTerm],
+    queryFn: async () => {
+      const res = await getAllCustomerPayments({ page: paymentsCurrentPage, per_page: 50, search: searchTerm || undefined });
+
+      const normalized = normalizePaginatedResponse(res);
+      let items = normalized.items;
+      const customersForLookup = extractItems(customersQuery.data);
+      let enriched = items.map((it) => {
+        const customerName = it.customer_name ?? it.party_name ?? customersForLookup.find((c) => Number(c.id) === Number(it.party_id))?.name;
+        return {
+          ...it,
+          customer_name: customerName,
+          notes: it.notes ?? it.description ?? it.statement ?? it.note ?? it.raw?.notes ?? undefined,
+          date: it.date ?? it.payment_date ?? it.transaction_date ?? undefined,
+        };
+      });
+
+      return {
+        items: enriched,
+        meta: normalized.meta,
+      };
+    },
+    enabled: activeTab === 'collections',
+    keepPreviousData: true,
+  });
+
+  const paymentsTabList = customerPaymentsQuery.data?.items || [];
+  const paymentsTabLoading = customerPaymentsQuery.isLoading;
+  const paymentsMeta = customerPaymentsQuery.data?.meta || { page: 1, lastPage: 1, total: 0, perPage: 50 };
 
   const repsStatsQuery = useQuery({
     queryKey: ['sales-reps-stats'],
@@ -213,6 +258,65 @@ export default function SalesInvoicesPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const ok = window.confirm('هل أنت متأكد من الحذف النهائي للفاتورة؟ لا يمكن التراجع عن هذه العملية.');
+      if (!ok) return Promise.reject(new Error('cancelled_by_user'));
+      const { deleteSalesInvoice } = require('../../../api/salesInvoices');
+      return deleteSalesInvoice(id);
+    },
+    onSuccess: (_, deletedId) => {
+      toast.success('تم حذف الفاتورة نهائيًا');
+      queryClient.setQueriesData({ queryKey: ['sales-invoices'] }, (currentData) => {
+        if (!currentData) return currentData;
+
+        const targetId = String(deletedId);
+
+        if (Array.isArray(currentData)) {
+          return currentData.filter((item) => String(item?.id) !== targetId);
+        }
+
+        if (Array.isArray(currentData?.items)) {
+          const updatedItems = currentData.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.meta?.total ?? currentData?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            items: updatedItems,
+            meta: {
+              ...(currentData?.meta || {}),
+              total: Math.max(0, total - (updatedItems.length < currentData.items.length ? 1 : 0)),
+            },
+          };
+        }
+
+        if (currentData?.data && Array.isArray(currentData.data?.items)) {
+          const updatedItems = currentData.data.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.data?.meta?.total ?? currentData?.data?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            data: {
+              ...currentData.data,
+              items: updatedItems,
+              meta: {
+                ...(currentData.data?.meta || {}),
+                total: Math.max(0, total - (updatedItems.length < currentData.data.items.length ? 1 : 0)),
+              },
+            },
+          };
+        }
+
+        return currentData;
+      });
+      queryClient.removeQueries({ queryKey: ['sales-invoice-details', deletedId] });
+      queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
+    },
+    onError: (error) => {
+      if (error.message === 'cancelled_by_user') return;
+      const msg = error?.response?.data?.message || 'تعذر حذف الفاتورة';
+      toast.error(msg);
+    },
+  });
+
   const customerReceiptMutation = useMutation({
     mutationFn: (data) => createCustomerPayment(data),
     onSuccess: () => {
@@ -221,6 +325,7 @@ export default function SalesInvoicesPage() {
       setReceiptSearchTerm('');
       setDebouncedReceiptSearchTerm('');
       resetReceiptForm({
+        invoice_id: 0,
         party_id: 0,
         amount: '',
         notes: '',
@@ -229,6 +334,7 @@ export default function SalesInvoicesPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
       queryClient.invalidateQueries({ queryKey: ['sales-reps-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
     },
     onError: () => toast.error('تعذر حفظ سند القبض'),
   });
@@ -240,6 +346,84 @@ export default function SalesInvoicesPage() {
 
     return () => clearTimeout(timeoutId);
   }, [receiptSearchTerm]);
+
+  const handleSavePayment = async (payment) => {
+    setEditingSaving(true);
+    try {
+      const payload = {
+        amount: Number(payment.amount) || 0,
+        transaction_date: payment.date || payment.payment_date || payment.transaction_date || undefined,
+        description: payment.notes || payment.description || undefined,
+        receipt_number: payment.receipt_number ?? payment.payment_number ?? undefined,
+      };
+      await updatePayment(payment.id, payload, payment.reference_type);
+      toast.success('تم تعديل السند');
+      setEditingPayment(null);
+      setPaymentsModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
+    } catch (e) {
+      toast.error('فشل تعديل السند');
+    } finally {
+      setEditingSaving(false);
+    }
+  };
+
+  const handleDeletePayment = async (payment) => {
+    const ok = window.confirm('هل متأكد من حذف السند؟ لا يمكن التراجع');
+    if (!ok) return;
+    try {
+
+      await deletePayment(payment.id, payment.reference_type);
+
+      toast.success('تم حذف السند');
+
+      queryClient.setQueriesData({ queryKey: ['customer-payments'] }, (currentData) => {
+        if (!currentData) return currentData;
+        const targetId = String(payment.id);
+
+        if (Array.isArray(currentData)) {
+          return currentData.filter((item) => String(item?.id) !== targetId);
+        }
+
+        if (Array.isArray(currentData?.items)) {
+          const updatedItems = currentData.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.meta?.total ?? currentData?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            items: updatedItems,
+            meta: {
+              ...(currentData?.meta || {}),
+              total: Math.max(0, total - (updatedItems.length < currentData.items.length ? 1 : 0)),
+            },
+          };
+        }
+
+        if (currentData?.data && Array.isArray(currentData.data?.items)) {
+          const updatedItems = currentData.data.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.data?.meta?.total ?? currentData?.data?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            data: {
+              ...currentData.data,
+              items: updatedItems,
+              meta: {
+                ...(currentData.data?.meta || {}),
+                total: Math.max(0, total - (updatedItems.length < currentData.data.items.length ? 1 : 0)),
+              },
+            },
+          };
+        }
+
+        return currentData;
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
+    } catch (e) {
+      toast.error('فشل حذف السند');
+    }
+  };
 
   const invoices = salesInvoicesQuery.data?.items || [];
   const meta = salesInvoicesQuery.data?.meta || { page: 1, lastPage: 1, total: 0, perPage: SALES_INVOICES_PER_PAGE };
@@ -341,12 +525,49 @@ export default function SalesInvoicesPage() {
                 <XCircle className="h-4 w-4" />
               </button>
             ) : null}
+            {row?.status === 'cancelled' ? (
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(row.id)}
+                className="rounded-md p-2 text-danger hover:bg-red-50"
+                title="حذف نهائي"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
         ),
       },
     ],
     []
   );
+
+  const collectionColumns = useMemo(() => {
+    const base = columns.filter((c) => c.key !== 'actions');
+    base.push({
+      key: 'collect',
+      label: 'إجراءات',
+      render: (_, row) => (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              const cid = getCustomerId(row);
+              setReceiptValue('party_id', cid);
+              setReceiptValue('invoice_id', row.id);
+              setIsReceiptModalOpen(true);
+            }}
+            className="rounded-md p-2 text-emerald-700 hover:bg-emerald-50"
+            title="تحصيل"
+          >
+            <HandCoins className="h-4 w-4" />
+          </button>
+        </div>
+      ),
+    });
+
+    return base;
+  }, [columns]);
 
   const repColumns = useMemo(
     () => [
@@ -449,6 +670,7 @@ export default function SalesInvoicesPage() {
       <div className="mb-4 flex w-full sm:w-fit overflow-hidden rounded-lg border border-border bg-white">
         {[
           { key: 'invoices', label: 'فواتير البيع' },
+          { key: 'collections', label: 'تحصيلات' },
           { key: 'returns', label: 'مرتجعات البيع' },
           { key: 'reps_stats', label: 'تقرير المهندسين / المناديب' },
         ].map((tab) => (
@@ -456,9 +678,8 @@ export default function SalesInvoicesPage() {
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 sm:flex-initial border-l border-border px-4 py-2 text-sm font-medium transition-colors first:border-l-0 ${
-              activeTab === tab.key ? 'bg-primary text-white' : 'text-text hover:bg-slate-50'
-            }`}
+            className={`flex-1 sm:flex-initial border-l border-border px-4 py-2 text-sm font-medium transition-colors first:border-l-0 ${activeTab === tab.key ? 'bg-primary text-white' : 'text-text hover:bg-slate-50'
+              }`}
           >
             {tab.label}
           </button>
@@ -467,58 +688,21 @@ export default function SalesInvoicesPage() {
 
       {activeTab === 'invoices' && (
         <>
-          <div className="mb-4 grid gap-3 rounded-xl border border-border bg-white p-3 md:grid-cols-4">
-        <select
-          value={filters.customer_id}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, customer_id: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <option value="">كل العملاء</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
+          <div className="mb-4 grid gap-3 rounded-xl border border-border bg-white p-3 md:grid-cols-5">
+            <div className="relative md:col-span-1">
+              <Input
+                value={searchTerm}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setSearchTerm(e.target.value);
+                }}
+                placeholder="بحث برقم الفاتورة..."
+                className="pr-9"
+              />
+            </div>
 
-        <select
-          value={filters.status}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, status: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          {statusOptions.map((option) => (
-            <option key={option.value || 'all'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
 
-        <input
-          type="date"
-          value={filters.from}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, from: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        />
-
-        <input
-          type="date"
-          value={filters.to}
-          onChange={(event) => {
-            setCurrentPage(1);
-            setFilters((previous) => ({ ...previous, to: event.target.value }));
-          }}
-          className="h-11 rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        />
-      </div>
+          </div>
 
           {salesInvoicesQuery.isLoading ? (
             <LoadingSpinner />
@@ -622,6 +806,16 @@ export default function SalesInvoicesPage() {
                             <span>إلغاء الفاتورة</span>
                           </button>
                         ) : null}
+                        {invoice?.status === 'cancelled' ? (
+                          <button
+                            type="button"
+                            onClick={() => deleteMutation.mutate(invoice.id)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-danger hover:bg-red-50 hover:text-red-700 transition-colors h-9"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span>حذف نهائي</span>
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   ))
@@ -709,6 +903,7 @@ export default function SalesInvoicesPage() {
                 setReceiptSearchTerm('');
                 setDebouncedReceiptSearchTerm('');
                 resetReceiptForm({
+                  invoice_id: 0,
                   party_id: 0,
                   amount: '',
                   notes: '',
@@ -727,88 +922,88 @@ export default function SalesInvoicesPage() {
                 <DialogDescription>سجّل تحصيل نقدي من  عميل</DialogDescription>
               </DialogHeader>
 
-          <form onSubmit={handleReceiptSubmit(onSubmitCustomerReceipt)} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-text">العميل *</label>
+              <form onSubmit={handleReceiptSubmit(onSubmitCustomerReceipt)} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">العميل *</label>
 
-              <div className="relative">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-                <Input
-                  value={receiptSearchTerm}
-                  onChange={(event) => {
-                    setReceiptSearchTerm(event.target.value);
-                    setReceiptValue('party_id', 0);
-                  }}
-                  placeholder="ابحث عن عميل..."
-                  className="pr-9"
-                />
-              </div>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                    <Input
+                      value={receiptSearchTerm}
+                      onChange={(event) => {
+                        setReceiptSearchTerm(event.target.value);
+                        setReceiptValue('party_id', 0);
+                      }}
+                      placeholder="ابحث عن عميل..."
+                      className="pr-9"
+                    />
+                  </div>
 
-              {customerReceiptsQuery.isLoading ? (
-                <LoadingSpinner size="sm" />
-              ) : (
-                <select
-                  {...registerReceipt('party_id')}
-                  className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text"
-                >
-                  <option value={0}>اختر عميلًا</option>
-                  {customersForReceipt.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+                  {customerReceiptsQuery.isLoading ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <select
+                      {...registerReceipt('party_id')}
+                      className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text"
+                    >
+                      <option value={0}>اختر عميلًا</option>
+                      {customersForReceipt.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
-              {selectedCustomer ? (
-                <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-text-muted">
-                  {selectedCustomer.name} — الرصيد: <BalanceDisplay balance={Number(selectedCustomer.balance) || 0} />
+                  {selectedCustomer ? (
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-text-muted">
+                      {selectedCustomer.name} — الرصيد: <BalanceDisplay balance={Number(selectedCustomer.balance) || 0} />
+                    </div>
+                  ) : null}
+
+                  {receiptErrors.party_id ? <p className="text-sm text-danger">{receiptErrors.party_id.message}</p> : null}
                 </div>
-              ) : null}
 
-              {receiptErrors.party_id ? <p className="text-sm text-danger">{receiptErrors.party_id.message}</p> : null}
-            </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text">المبلغ *</label>
+                    <Input type="number" min="0" step="0.01" {...registerReceipt('amount')} />
+                    {receiptErrors.amount ? <p className="text-sm text-danger">{receiptErrors.amount.message}</p> : null}
+                  </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text">المبلغ *</label>
-                <Input type="number" min="0" step="0.01" {...registerReceipt('amount')} />
-                {receiptErrors.amount ? <p className="text-sm text-danger">{receiptErrors.amount.message}</p> : null}
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text">التاريخ</label>
+                    <Input type="date" {...registerReceipt('date')} />
+                    {receiptErrors.date ? <p className="text-sm text-danger">{receiptErrors.date.message}</p> : null}
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text">التاريخ</label>
-                <Input type="date" {...registerReceipt('date')} />
-                {receiptErrors.date ? <p className="text-sm text-danger">{receiptErrors.date.message}</p> : null}
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">رقم فاتورة التحصيل</label>
+                  <Input {...registerReceipt('receipt_number')} placeholder="مثال: RCP-001" dir="ltr" />
+                  <p className="text-xs text-text-muted">اختياري — رقم السند أو الإيصال</p>
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-text">رقم فاتورة التحصيل</label>
-              <Input {...registerReceipt('receipt_number')} placeholder="مثال: RCP-001" dir="ltr" />
-              <p className="text-xs text-text-muted">اختياري — رقم السند أو الإيصال</p>
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">الملاحظات</label>
+                  <Input {...registerReceipt('notes')} placeholder="ملاحظات إضافية" />
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-text">الملاحظات</label>
-              <Input {...registerReceipt('notes')} placeholder="ملاحظات إضافية" />
-            </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsReceiptModalOpen(false)}
+                    disabled={customerReceiptMutation.isPending}
+                  >
+                    إغلاق
+                  </Button>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsReceiptModalOpen(false)}
-                disabled={customerReceiptMutation.isPending}
-              >
-                إغلاق
-              </Button>
-
-              <Button type="submit" disabled={customerReceiptMutation.isPending}>
-                {customerReceiptMutation.isPending ? 'جاري الحفظ...' : '💾 حفظ سند القبض'}
-              </Button>
-            </DialogFooter>
-          </form>
+                  <Button type="submit" disabled={customerReceiptMutation.isPending}>
+                    {customerReceiptMutation.isPending ? 'جاري الحفظ...' : '💾 حفظ سند القبض'}
+                  </Button>
+                </DialogFooter>
+              </form>
             </DialogContent>
           </Dialog>
 
@@ -828,48 +1023,184 @@ export default function SalesInvoicesPage() {
                 <DialogDescription>سيتم عكس المخزون والقيود المالية</DialogDescription>
               </DialogHeader>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-text">سبب الإلغاء *</label>
-            <textarea
-              value={cancelReason}
-              onChange={(event) => {
-                setCancelReason(event.target.value);
-                if (cancelReasonError) setCancelReasonError('');
-              }}
-              rows={4}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              placeholder="اكتب سبب الإلغاء"
-            />
-            {cancelReasonError ? <p className="text-sm text-danger">{cancelReasonError}</p> : null}
-          </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text">سبب الإلغاء *</label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(event) => {
+                    setCancelReason(event.target.value);
+                    if (cancelReasonError) setCancelReasonError('');
+                  }}
+                  rows={4}
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  placeholder="اكتب سبب الإلغاء"
+                />
+                {cancelReasonError ? <p className="text-sm text-danger">{cancelReasonError}</p> : null}
+              </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setCancelInvoice(null);
-                setCancelReason('');
-                setCancelReasonError('');
-              }}
-              disabled={cancelMutation.isPending}
-            >
-              إلغاء
-            </Button>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setCancelInvoice(null);
+                    setCancelReason('');
+                    setCancelReasonError('');
+                  }}
+                  disabled={cancelMutation.isPending}
+                >
+                  إلغاء
+                </Button>
 
-            <Button
-              type="button"
-              onClick={onCancelConfirm}
-              disabled={cancelMutation.isPending}
-              className="bg-danger text-white hover:bg-red-700 focus-visible:ring-danger"
-            >
-              {cancelMutation.isPending ? 'جاري التنفيذ...' : 'تأكيد الإلغاء'}
-            </Button>
-          </DialogFooter>
+                <Button
+                  type="button"
+                  onClick={onCancelConfirm}
+                  disabled={cancelMutation.isPending}
+                  className="bg-danger text-white hover:bg-red-700 focus-visible:ring-danger"
+                >
+                  {cancelMutation.isPending ? 'جاري التنفيذ...' : 'تأكيد الإلغاء'}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </>
       )}
+
+      {activeTab === 'collections' && (
+        <>
+          <div className="mb-4 grid gap-3 rounded-xl border border-border bg-white p-3 md:grid-cols-5">
+            <div className="relative md:col-span-2">
+              <Input
+                value={searchTerm}
+                onChange={(e) => {
+                  setPaymentsCurrentPage(1);
+                  setSearchTerm(e.target.value);
+                }}
+                placeholder="بحث برقم السند..."
+                className="pr-9"
+              />
+            </div>
+          </div>
+
+          {paymentsTabLoading ? (
+            <LoadingSpinner />
+          ) : (
+            <>
+              <div className="hidden md:block">
+                <DataTable
+                  columns={[
+                    { key: 'receipt', label: 'رقم السند', render: (_, row) => row.receipt_number ?? row.payment_number ?? row.id },
+                    { key: 'date', label: 'التاريخ', render: (value, row) => row.date ?? row.payment_date ?? '—' },
+                    { key: 'amount', label: 'المبلغ', render: (value, row) => formatCurrency(row.amount ?? row.debit ?? row.credit ?? 0) },
+                    { key: 'customer_name', label: 'العميل', render: (value, row) => row.customer_name ?? row.party_name ?? row.customer?.name ?? row.party?.name ?? '—' },
+
+                    { key: 'desc', label: 'البيان', render: (value, row) => row.notes ?? row.description ?? row.statement ?? row.note ?? row.raw?.notes ?? '—' },
+                    {
+                      key: 'actions', label: 'إجراءات', render: (_, row) => (
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="rounded-md p-2 text-primary hover:bg-primary/10" title="تعديل" onClick={() => { setEditingPayment(row); setPaymentsModalOpen(true); }}>
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button type="button" className="rounded-md p-2 text-danger hover:bg-red-50" title="حذف" onClick={() => handleDeletePayment(row)}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )
+                    },
+                  ]}
+                  data={paymentsTabList}
+                  loading={paymentsTabLoading}
+                  emptyMessage="لا توجد تحصيلات"
+                />
+              </div>
+
+              <div className="block md:hidden space-y-3">
+                {paymentsTabLoading ? (
+                  <LoadingSpinner />
+                ) : paymentsTabList.length === 0 ? (
+                  <div className="rounded-xl border border-border bg-white p-8 text-center text-text-muted">لا توجد تحصيلات</div>
+                ) : (
+                  paymentsTabList.map((p) => (
+                    <div key={p.id} className="rounded-xl border border-border bg-white p-4 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-text">{p.receipt_number ?? p.payment_number ?? p.id}</span>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => { setEditingPayment(p); setPaymentsModalOpen(true); }} className="rounded-md p-2 text-primary hover:bg-primary/10"><Edit className="h-4 w-4" /></button>
+                          <button type="button" onClick={() => handleDeletePayment(p)} className="rounded-md p-2 text-danger hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </div>
+                      <div className="text-sm text-text-muted">{p.date ?? p.payment_date ?? p.transaction_date ?? '—'}</div>
+                      <div className="text-lg font-semibold">{formatCurrency(p.amount ?? p.debit ?? p.credit ?? 0)}</div>
+                      <div className="text-sm text-text-muted">{p.customer_name}</div>
+                      <div className="text-sm text-text-muted">{p.description}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <Pagination
+                currentPage={paymentsMeta.page}
+                lastPage={paymentsMeta.lastPage}
+                total={paymentsMeta.total}
+                perPage={paymentsMeta.perPage}
+                itemLabel="سند تحصيل"
+                onPageChange={(nextPage) => {
+                  if (nextPage < 1 || nextPage > paymentsMeta.lastPage) return;
+                  setPaymentsCurrentPage(nextPage);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                isLoading={customerPaymentsQuery.isFetching}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      <Dialog open={paymentsModalOpen} onOpenChange={(open) => { if (!open) { setPaymentsModalOpen(false); setEditingPayment(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>تعديل سند التحصيل</DialogTitle>
+            <DialogDescription>عدّل تفاصيل السند ثم احفظ</DialogDescription>
+          </DialogHeader>
+
+          {editingPayment ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">المبلغ</label>
+                  <Input type="number" value={editingPayment.amount ?? editingPayment.debit ?? editingPayment.credit ?? 0} onChange={(e) => setEditingPayment((s) => ({ ...s, amount: e.target.value }))} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">التاريخ</label>
+                  <Input type="date" value={editingPayment.payment_date ?? ''} onChange={(e) => setEditingPayment((s) => ({ ...s, date: e.target.value }))} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text">الاسم</label>
+                  <Input type="text" value={editingPayment.party_name ?? ''} onChange={(e) => setEditingPayment((s) => ({ ...s, party_name: e.target.value }))} />
+                </div>
+
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text">رقم السند</label>
+                <Input value={editingPayment.receipt_number ?? editingPayment.payment_number ?? ''} onChange={(e) => setEditingPayment((s) => ({ ...s, receipt_number: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text">الملاحظات</label>
+                <Input value={editingPayment.notes ?? editingPayment.description ?? ''} onChange={(e) => setEditingPayment((s) => ({ ...s, notes: e.target.value }))} />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => { setPaymentsModalOpen(false); setEditingPayment(null); }} disabled={editingSaving}>إلغاء</Button>
+                <Button type="button" onClick={() => handleSavePayment(editingPayment)} disabled={editingSaving}>{editingSaving ? 'جاري الحفظ...' : 'حفظ'}</Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       {activeTab === 'returns' && (
         <SalesReturnsTab />
