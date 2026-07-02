@@ -701,8 +701,13 @@ export default function CustomerStatement() {
                       onClick={async () => {
                         const ok = window.confirm('هل متأكد من حذف سند التحصيل؟ لا يمكن التراجع');
                         if (!ok) return;
+                        const paymentId = selectedPayment?.id ?? selectedPayment?.raw?.id ?? selectedPayment?.raw?.payment_id ?? selectedPayment?.payment_id ?? null;
+                        if (!paymentId) {
+                          toast.error('لا يوجد معرف صالح للسند للحذف');
+                          return;
+                        }
                         try {
-                          await deletePayment(selectedPayment.id || selectedPayment.raw?.id || selectedPayment.raw?.payment_id);
+                          await deletePayment(paymentId, selectedPayment.referenceType);
                           toast.success('تم حذف السند');
                           setSelectedPayment(null);
                           queryClient.invalidateQueries(['customers-statement', id]);
@@ -739,7 +744,12 @@ export default function CustomerStatement() {
                             transaction_date: editDate || undefined,
                             description: editNotes || undefined,
                           };
-                          await updatePayment(selectedPayment.id || selectedPayment.raw?.id || selectedPayment.raw?.payment_id, payload);
+                          const paymentId = selectedPayment?.id ?? selectedPayment?.raw?.id ?? selectedPayment?.raw?.payment_id ?? selectedPayment?.payment_id ?? null;
+                          if (!paymentId) {
+                            toast.error('لا يوجد معرف صالح للسند للحفظ');
+                            return;
+                          }
+                          await updatePayment(paymentId, payload, selectedPayment.referenceType);
                           toast.success('تم تعديل السند');
                           setIsEditingPayment(false);
                           setSelectedPayment(null);

@@ -259,16 +259,59 @@ export default function SalesInvoicesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => {
+    mutationFn: async (id) => {
+      const ok = window.confirm('هل أنت متأكد من الحذف النهائي للفاتورة؟ لا يمكن التراجع عن هذه العملية.');
+      if (!ok) return Promise.reject(new Error('cancelled_by_user'));
       const { deleteSalesInvoice } = require('../../../api/salesInvoices');
       return deleteSalesInvoice(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       toast.success('تم حذف الفاتورة نهائيًا');
+      queryClient.setQueriesData({ queryKey: ['sales-invoices'] }, (currentData) => {
+        if (!currentData) return currentData;
+
+        const targetId = String(deletedId);
+
+        if (Array.isArray(currentData)) {
+          return currentData.filter((item) => String(item?.id) !== targetId);
+        }
+
+        if (Array.isArray(currentData?.items)) {
+          const updatedItems = currentData.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.meta?.total ?? currentData?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            items: updatedItems,
+            meta: {
+              ...(currentData?.meta || {}),
+              total: Math.max(0, total - (updatedItems.length < currentData.items.length ? 1 : 0)),
+            },
+          };
+        }
+
+        if (currentData?.data && Array.isArray(currentData.data?.items)) {
+          const updatedItems = currentData.data.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.data?.meta?.total ?? currentData?.data?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            data: {
+              ...currentData.data,
+              items: updatedItems,
+              meta: {
+                ...(currentData.data?.meta || {}),
+                total: Math.max(0, total - (updatedItems.length < currentData.data.items.length ? 1 : 0)),
+              },
+            },
+          };
+        }
+
+        return currentData;
+      });
+      queryClient.removeQueries({ queryKey: ['sales-invoice-details', deletedId] });
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['sales-invoice-details'] });
     },
     onError: (error) => {
+      if (error.message === 'cancelled_by_user') return;
       const msg = error?.response?.data?.message || 'تعذر حذف الفاتورة';
       toast.error(msg);
     },
@@ -313,7 +356,7 @@ export default function SalesInvoicesPage() {
         description: payment.notes || payment.description || undefined,
         receipt_number: payment.receipt_number ?? payment.payment_number ?? undefined,
       };
-      await updatePayment(payment.id, payload);
+      await updatePayment(payment.id, payload, payment.reference_type);
       toast.success('تم تعديل السند');
       setEditingPayment(null);
       setPaymentsModalOpen(false);
@@ -330,8 +373,51 @@ export default function SalesInvoicesPage() {
     const ok = window.confirm('هل متأكد من حذف السند؟ لا يمكن التراجع');
     if (!ok) return;
     try {
-      await deletePayment(payment.id);
+
+      await deletePayment(payment.id, payment.reference_type);
+
       toast.success('تم حذف السند');
+
+      queryClient.setQueriesData({ queryKey: ['customer-payments'] }, (currentData) => {
+        if (!currentData) return currentData;
+        const targetId = String(payment.id);
+
+        if (Array.isArray(currentData)) {
+          return currentData.filter((item) => String(item?.id) !== targetId);
+        }
+
+        if (Array.isArray(currentData?.items)) {
+          const updatedItems = currentData.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.meta?.total ?? currentData?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            items: updatedItems,
+            meta: {
+              ...(currentData?.meta || {}),
+              total: Math.max(0, total - (updatedItems.length < currentData.items.length ? 1 : 0)),
+            },
+          };
+        }
+
+        if (currentData?.data && Array.isArray(currentData.data?.items)) {
+          const updatedItems = currentData.data.items.filter((item) => String(item?.id) !== targetId);
+          const total = Number(currentData?.data?.meta?.total ?? currentData?.data?.total ?? updatedItems.length);
+          return {
+            ...currentData,
+            data: {
+              ...currentData.data,
+              items: updatedItems,
+              meta: {
+                ...(currentData.data?.meta || {}),
+                total: Math.max(0, total - (updatedItems.length < currentData.data.items.length ? 1 : 0)),
+              },
+            },
+          };
+        }
+
+        return currentData;
+      });
+
       queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
       queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
     } catch (e) {

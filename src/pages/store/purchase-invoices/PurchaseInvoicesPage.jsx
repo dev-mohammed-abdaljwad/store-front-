@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../../../components/ui/input';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 import { normalizePaginatedResponse } from '../../../utils/pagination';
+import { removeDeletedInvoiceFromQueryData } from '../../../utils/invoiceList';
 import PurchaseReturnsTab from './PurchaseReturnsTab';
 
 const supplierPaymentSchema = z.object({
@@ -68,6 +69,36 @@ const getInvoiceAmount = (invoice, key) => {
 const getInvoiceRemaining = (invoice) => getInvoiceAmount(invoice, 'total') - getInvoiceAmount(invoice, 'paid');
 
 const getSupplierId = (invoice) => invoice?.supplier?.id || invoice?.supplier_id || invoice?.vendor?.id || invoice?.vendor_id || 0;
+
+// The backend delete/update endpoint expects the financial transaction id, not the visible payment number.
+const resolvePaymentId = (payment) => {
+  const candidates = [
+    payment?.id,
+    payment?.payment_id,
+    payment?.transaction_id,
+    payment?.financial_transaction_id,
+    payment?.financial_transaction?.id,
+    payment?.transaction?.id,
+    payment?.raw?.id,
+    payment?.raw?.payment_id,
+    payment?.raw?.transaction_id,
+    payment?.raw?.financial_transaction_id,
+    payment?.raw?.financial_transaction?.id,
+    payment?.data?.id,
+    payment?.data?.payment_id,
+    payment?.data?.transaction_id,
+    payment?.data?.financial_transaction_id,
+    payment?.data?.financial_transaction?.id,
+    payment?.payment?.id,
+    payment?.payment?.payment_id,
+    payment?.payment?.transaction_id,
+    payment?.payment?.financial_transaction_id,
+    payment?.payment?.financial_transaction?.id,
+  ];
+
+  const resolved = candidates.find((value) => value !== undefined && value !== null && value !== '');
+  return resolved ? String(resolved) : null;
+};
 
 const normalizeList = (response) => {
   const normalized = normalizePaginatedResponse(response);
@@ -180,9 +211,12 @@ export default function PurchaseInvoicesPage() {
       const { deletePurchaseInvoice } = require('../../../api/purchaseInvoices');
       return deletePurchaseInvoice(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       toast.success('تم حذف الفاتورة نهائيًا');
-      queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+      queryClient.setQueriesData({ queryKey: ['purchase-invoices'] }, (currentData) =>
+        removeDeletedInvoiceFromQueryData(currentData, deletedId)
+      );
+      queryClient.invalidateQueries({ queryKey: ['purchase-invoices'], refetchType: 'active' });
     },
     onError: (error) => {
       const msg = error?.response?.data?.message || 'تعذر حذف الفاتورة';
@@ -283,14 +317,23 @@ export default function PurchaseInvoicesPage() {
 
   const handleSavePayment = async (payment) => {
     setEditingSaving(true);
+    const paymentId = resolvePaymentId(payment);
+    if (!paymentId) {
+      toast.error('تعذر تحديد معرف السند للتعديل');
+      setEditingSaving(false);
+      return;
+    }
+
     try {
+      // eslint-disable-next-line no-console
+      console.log('Update payment request id:', paymentId, 'payment:', payment);
       const payload = {
         amount: Number(payment.amount) || 0,
         description: payment.notes ?? payment.description ?? undefined,
         receipt_number: payment.receipt_number ?? payment.receiptNumber ?? undefined,
         transaction_date: payment.date || payment.transaction_date || undefined,
       };
-      await updatePayment(payment.id, payload);
+      await updatePayment(paymentId, payload, payment.reference_type);
       toast.success('تم تعديل السند');
       setEditingPayment(null);
       // refresh list
@@ -321,10 +364,18 @@ export default function PurchaseInvoicesPage() {
   };
 
   const handleDeletePayment = async (payment) => {
+    const paymentId = resolvePaymentId(payment);
+    if (!paymentId) {
+      toast.error('تعذر تحديد معرف السند للحذف');
+      return;
+    }
+
     const ok = window.confirm('هل متأكد من حذف السند؟ لا يمكن التراجع');
     if (!ok) return;
     try {
-      await deletePayment(payment.id);
+      // eslint-disable-next-line no-console
+      console.log('Delete payment request id:', paymentId, 'payment:', payment);
+      await deletePayment(paymentId, payment.reference_type);
       toast.success('تم حذف السند');
       // refresh list
       const res = await getAllSupplierPayments();
