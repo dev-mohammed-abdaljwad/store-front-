@@ -867,6 +867,10 @@ export default function CustomerStatement() {
                     <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
                   </div>
                   <div>
+                    <label className="mb-1 block text-sm font-medium text-text">رقم السند</label>
+                    <Input value={editReceiptNumber} onChange={(e) => setEditReceiptNumber(e.target.value)} />
+                  </div>
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-text">البيان</label>
                     <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
                   </div>
