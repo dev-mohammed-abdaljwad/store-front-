@@ -397,6 +397,7 @@ export default function CustomerStatement() {
                   setEditAmount(String(amount));
                   setEditDate(row.date || row.raw?.date || '');
                   setEditNotes(row.description || row.raw?.notes || '');
+                  setEditReceiptNumber(row.paymentNumber || row.raw?.payment_number || row.raw?.receipt_number || '');
                   setIsEditingPayment(true);
                 }}
                 className="rounded-md p-1.5 text-primary hover:bg-primary/10"
@@ -441,6 +442,7 @@ export default function CustomerStatement() {
   const [editAmount, setEditAmount] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editReceiptNumber, setEditReceiptNumber] = useState('');
 
   const invoiceItemsColumns = [
     {
@@ -819,6 +821,7 @@ export default function CustomerStatement() {
                         setEditAmount(String(amount));
                         setEditDate(selectedPayment.date || selectedPayment.raw?.date || '');
                         setEditNotes(selectedPayment.description || selectedPayment.raw?.notes || '');
+                        setEditReceiptNumber(selectedPayment.paymentNumber || selectedPayment.raw?.payment_number || selectedPayment.raw?.receipt_number || '');
                         setIsEditingPayment(true);
                       }}
                     >
