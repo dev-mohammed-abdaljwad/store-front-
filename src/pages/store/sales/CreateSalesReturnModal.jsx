@@ -15,6 +15,8 @@ const salesReturnSchema = z
   .object({
     customer_id: z.coerce.number().min(1, 'العميل مطلوب'),
     sales_invoice_id: z.coerce.number().optional().nullable(),
+    return_number: z.string().trim().min(1, 'رقم المرتجع مطلوب'),
+    return_date: z.string().optional(),
     refund_amount: z.coerce.number().min(0, 'المبلغ غير صحيح').default(0),
     notes: z.string().optional(),
     items: z
@@ -58,6 +60,8 @@ export default function CreateSalesReturnModal({ onClose, onSuccess }) {
     defaultValues: {
       customer_id: 0,
       sales_invoice_id: null,
+      return_number: '',
+      return_date: new Date().toISOString().split('T')[0],
       refund_amount: 0,
       notes: '',
       items: [defaultItem],
@@ -95,9 +99,11 @@ export default function CreateSalesReturnModal({ onClose, onSuccess }) {
   });
 
   const onSubmit = (values) => {
-    createMutation.mutate({
+    const payload = {
       customer_id: Number(values.customer_id),
       sales_invoice_id: linkInvoice ? Number(values.sales_invoice_id) || null : null,
+      return_number: values.return_number?.trim() || '',
+      return_date: values.return_date || new Date().toISOString().split('T')[0],
       refund_amount: Number(values.refund_amount) || 0,
       notes: values.notes?.trim() || '',
       items: values.items.map((item) => ({
@@ -105,7 +111,9 @@ export default function CreateSalesReturnModal({ onClose, onSuccess }) {
         quantity: Number(item.quantity) || 1,
         unit_price: Number(item.unit_price) || 0,
       })),
-    });
+    };
+    console.log('🔵 Sales Return payload:', JSON.stringify(payload, null, 2));
+    createMutation.mutate(payload);
   };
 
   return (
@@ -136,6 +144,33 @@ export default function CreateSalesReturnModal({ onClose, onSuccess }) {
               error={errors.customer_id?.message}
             />
             <input type="hidden" {...register('customer_id')} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-text">رقم فاتورة المرتجع *</label>
+              <input
+                type="text"
+                placeholder="أدخل رقم المرتجع..."
+                {...register('return_number')}
+                className="h-10 w-full rounded-lg border border-border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
+              {errors.return_number ? (
+                <p className="text-xs text-danger">{errors.return_number.message}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-text">تاريخ فاتورة المرتجع</label>
+              <input
+                type="date"
+                {...register('return_date')}
+                className="h-10 w-full rounded-lg border border-border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
+              {errors.return_date ? (
+                <p className="text-xs text-danger">{errors.return_date.message}</p>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-3 rounded-lg border border-border p-4">

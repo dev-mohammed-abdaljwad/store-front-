@@ -15,6 +15,8 @@ const purchaseReturnSchema = z
   .object({
     supplier_id: z.coerce.number().min(1, 'المورد مطلوب'),
     purchase_invoice_id: z.coerce.number().optional().nullable(),
+    return_number: z.string().trim().min(1, 'رقم المرتجع مطلوب'),
+    return_date: z.string().optional(),
     refund_amount: z.coerce.number().min(0, 'المبلغ غير صحيح').default(0),
     notes: z.string().optional(),
     items: z
@@ -60,6 +62,8 @@ export default function CreatePurchaseReturnModal({ onClose, onSuccess }) {
     defaultValues: {
       supplier_id: 0,
       purchase_invoice_id: null,
+      return_number: '',
+      return_date: new Date().toISOString().split('T')[0],
       refund_amount: 0,
       notes: '',
       items: [defaultItem],
@@ -100,6 +104,8 @@ export default function CreatePurchaseReturnModal({ onClose, onSuccess }) {
     createMutation.mutate({
       supplier_id: Number(values.supplier_id),
       purchase_invoice_id: linkInvoice ? Number(values.purchase_invoice_id) || null : null,
+      return_number: values.return_number?.trim() || undefined,
+      return_date: values.return_date || new Date().toISOString().split('T')[0],
       refund_amount: Number(values.refund_amount) || 0,
       notes: values.notes?.trim() || '',
       items: values.items.map((item) => ({
@@ -138,6 +144,33 @@ export default function CreatePurchaseReturnModal({ onClose, onSuccess }) {
               error={errors.supplier_id?.message}
             />
             <input type="hidden" {...register('supplier_id')} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-text">رقم فاتورة المرتجع *</label>
+              <input
+                type="text"
+                placeholder="أدخل رقم المرتجع..."
+                {...register('return_number')}
+                className="h-10 w-full rounded-lg border border-border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
+              {errors.return_number ? (
+                <p className="text-xs text-danger">{errors.return_number.message}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-text">تاريخ فاتورة المرتجع</label>
+              <input
+                type="date"
+                {...register('return_date')}
+                className="h-10 w-full rounded-lg border border-border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
+              {errors.return_date ? (
+                <p className="text-xs text-danger">{errors.return_date.message}</p>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-3 rounded-lg border border-border p-4">

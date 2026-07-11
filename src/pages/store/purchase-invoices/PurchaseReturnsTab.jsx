@@ -73,7 +73,6 @@ export default function PurchaseReturnsTab() {
                   <tr>
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">رقم المرتجع</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">المورد</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">الفاتورة الأصلية</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">عدد الأصناف</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">الإجمالي</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">المبلغ المسترد</th>
@@ -97,13 +96,7 @@ export default function PurchaseReturnsTab() {
                       <tr key={ret?.id || returnNumber} className="border-b border-border last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-3 font-mono font-medium text-primary">{returnNumber}</td>
                         <td className="px-4 py-3 font-medium text-text">{supplierName}</td>
-                        <td className="px-4 py-3 text-xs text-text-muted">
-                          {invoiceNumber !== '—' ? (
-                            <span className="rounded bg-slate-100 px-2 py-0.5 font-mono">{invoiceNumber}</span>
-                          ) : (
-                            <span className="text-text-muted">مرتجع مستقل</span>
-                          )}
-                        </td>
+
                         <td className="px-4 py-3 text-text-muted">{itemsCount} صنف</td>
                         <td className="px-4 py-3 font-mono font-medium text-text">{formatCurrency(totalAmount)}</td>
                         <td className="px-4 py-3 font-mono font-medium text-green-600">
