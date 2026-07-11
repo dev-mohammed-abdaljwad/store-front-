@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, RotateCcw } from 'lucide-react';
-import { getPurchaseReturns } from '../../../api/purchaseInvoices';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { Plus, RotateCcw, Edit, Trash2 } from 'lucide-react';
+import { getPurchaseReturns, deletePurchaseReturn } from '../../../api/purchaseInvoices';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 import CreatePurchaseReturnModal from './CreatePurchaseReturnModal';
+import EditPurchaseReturnModal from './EditPurchaseReturnModal';
 import { Input } from '../../../components/ui/input';
+import toast from 'react-hot-toast';
 
 const extractReturns = (response) => {
   const payload = response?.data?.data ?? response?.data ?? [];
@@ -22,6 +24,7 @@ const toNumber = (value) => {
 
 export default function PurchaseReturnsTab() {
   const [showCreate, setShowCreate] = useState(false);
+  const [editingReturnId, setEditingReturnId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const queryClient = useQueryClient();
 
@@ -32,11 +35,33 @@ export default function PurchaseReturnsTab() {
 
   const returns = extractReturns(returnsQuery.data);
 
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deletePurchaseReturn(id),
+    onSuccess: () => {
+      toast.success('تم حذف مرتجع الشراء بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['purchase-returns'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+      queryClient.invalidateQueries({ queryKey: ['cash-balance'] });
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message || 'تعذر حذف مرتجع الشراء';
+      toast.error(message);
+    },
+  });
+
+  const handleDelete = (id, returnNumber) => {
+    if (window.confirm(`هل أنت متأكد من حذف المرتجع رقم ${returnNumber}؟ سيتم إلغاء تأثيره على المخزون وحساب المورد والخزنة.`)) {
+      deleteMutation.mutate(id);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-text">مرتجعات المشتريات</h2>
+          <h2 className="text-lg font-bold text-text">مرتجع مشتريات جديد</h2>
           <p className="text-sm text-text-muted">المنتجات المعادة إلى الموردين</p>
         </div>
 
@@ -45,7 +70,7 @@ export default function PurchaseReturnsTab() {
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="بحث برقم الفاتورة..."
+              placeholder="بحث برقم المرتجع..."
               className="w-full"
             />
           </div>
@@ -78,6 +103,7 @@ export default function PurchaseReturnsTab() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">المبلغ المسترد</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">المتبقي</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-text-muted">التاريخ</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted">خيارات</th>
                   </tr>
                 </thead>
 
@@ -85,7 +111,6 @@ export default function PurchaseReturnsTab() {
                   {returns.map((ret) => {
                     const returnNumber = ret?.return_number || ret?.number || `PR-${ret?.id || '—'}`;
                     const supplierName = ret?.supplier_name || ret?.supplier?.name || '—';
-                    const invoiceNumber = ret?.invoice_number || ret?.purchase_invoice_number || '—';
                     const itemsCount = Number(ret?.items_count ?? ret?.items?.length ?? 0) || 0;
                     const totalAmount = toNumber(ret?.total_amount ?? ret?.total ?? ret?.amount);
                     const refundAmount = toNumber(ret?.refund_amount ?? ret?.cash_refund_amount);
@@ -108,6 +133,26 @@ export default function PurchaseReturnsTab() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-text-muted">{dateValue ? formatDate(dateValue) : '—'}</td>
+                        <td className="px-4 py-3 text-left">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingReturnId(ret.id)}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                              title="تعديل"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(ret.id, returnNumber)}
+                              className="rounded p-1 text-red-500 hover:bg-red-50 hover:text-red-700"
+                              title="حذف"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -153,6 +198,27 @@ export default function PurchaseReturnsTab() {
 
                     <hr className="border-slate-100" />
 
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingReturnId(ret.id)}
+                          className="rounded p-1.5 text-slate-600 border border-slate-200 hover:bg-slate-50"
+                          title="تعديل"
+                        >
+                          <Edit size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(ret.id, returnNumber)}
+                          className="rounded p-1.5 text-red-500 border border-red-100 hover:bg-red-50"
+                          title="حذف"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-3 gap-2 text-center text-xs">
                       <div className="rounded-lg bg-slate-50 p-2">
                         <div className="text-text-muted mb-1">الإجمالي</div>
@@ -194,6 +260,21 @@ export default function PurchaseReturnsTab() {
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
             queryClient.invalidateQueries({ queryKey: ['suppliers'] });
             setShowCreate(false);
+          }}
+        />
+      ) : null}
+
+      {editingReturnId ? (
+        <EditPurchaseReturnModal
+          returnId={editingReturnId}
+          onClose={() => setEditingReturnId(null)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['purchase-returns'] });
+            queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+            queryClient.invalidateQueries({ queryKey: ['cash-balance'] });
+            setEditingReturnId(null);
           }}
         />
       ) : null}

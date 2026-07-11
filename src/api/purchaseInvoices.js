@@ -29,6 +29,9 @@ export const getPurchaseReturns = (params = {}) =>
 		},
 	});
 export const createPurchaseReturn = (data) => axios.post('/store/purchase-returns', data);
+export const getPurchaseReturn = (id) => axios.get(`/store/purchase-returns/${id}`);
+export const updatePurchaseReturn = (id, data) => axios.put(`/store/purchase-returns/${id}`, data);
+export const deletePurchaseReturn = (id) => axios.delete(`/store/purchase-returns/${id}`);
 
 export const uploadPurchaseInvoiceAttachment = (id, formData, config = {}) =>
 	axios.post(`/store/purchase-invoices/${id}/attachment`, formData, {

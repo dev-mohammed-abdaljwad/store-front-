@@ -29,6 +29,9 @@ export const getSalesReturns = (params = {}) =>
 		},
 	});
 export const createSalesReturn = (data) => axios.post('/store/sales-returns', data);
+export const getSalesReturn = (id) => axios.get(`/store/sales-returns/${id}`);
+export const updateSalesReturn = (id, data) => axios.put(`/store/sales-returns/${id}`, data);
+export const deleteSalesReturn = (id) => axios.delete(`/store/sales-returns/${id}`);
 export const getSalesRepsStats = () => axios.get('/store/sales-invoices/reps-stats');
 export const deleteSalesInvoice = (id) => axios.delete(`/store/sales-invoices/${id}`);
 export const getSalesCategoryStats = (params = {}) =>
