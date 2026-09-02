@@ -26,6 +26,9 @@ import StoreDashboardPage from './pages/store/dashboard/StoreDashboardPage';
 import StoreSettings from './pages/store/settings/StoreSettings';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PWAInstallPrompt from './components/shared/PWAInstallPrompt';
+import ManufacturingPage from './pages/store/manufacturing/ManufacturingPage';
+import CreateManufacturingOrderPage from './pages/store/manufacturing/CreateManufacturingOrderPage';
+import EditManufacturingOrderPage from './pages/store/manufacturing/EditManufacturingOrderPage';
 
 export default function App() {
   return (
@@ -64,6 +67,9 @@ export default function App() {
               <Route path="cash" element={<CashPage />} />
               <Route path="inventory" element={<InventoryPage />} />
               <Route path="settings" element={<StoreSettings />} />
+              <Route path="manufacturing" element={<ManufacturingPage />} />
+              <Route path="manufacturing/create" element={<CreateManufacturingOrderPage />} />
+              <Route path="manufacturing/:id/edit" element={<EditManufacturingOrderPage />} />
               <Route path="*" element={<Navigate to="/store/dashboard" replace />} />
             </Route>
           </Route>

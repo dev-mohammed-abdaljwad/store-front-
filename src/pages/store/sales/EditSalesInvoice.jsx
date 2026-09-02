@@ -80,7 +80,7 @@ function QuickAddBar({ onAdd, storeId }) {
 
   const variantsQuery = useQuery({
     queryKey: ['sales-quick-add', storeId, debouncedSearch],
-    queryFn: () => searchVariants(debouncedSearch, { store_id: storeId || undefined }),
+    queryFn: () => searchVariants(debouncedSearch, { store_id: storeId || undefined, product_types: 'finished_product' }),
     enabled: debouncedSearch.trim().length > 0,
     keepPreviousData: true,
   });
@@ -556,7 +556,7 @@ export default function EditSalesInvoice() {
                                 });
                                 setSelectedVariants((previous) => ({ ...previous, [index]: selectedVariant || null }));
                               }}
-                              fetchFn={(search) => searchVariants(search, { store_id: currentStoreId })}
+                              fetchFn={(search) => searchVariants(search, { store_id: currentStoreId, product_types: 'finished_product' })}
                               queryKey={`variants-search-${index}`}
                               placeholder="ابحث..."
                               renderOption={(item) => {
@@ -676,7 +676,7 @@ export default function EditSalesInvoice() {
                               });
                               setSelectedVariants((previous) => ({ ...previous, [index]: selectedVariant || null }));
                             }}
-                            fetchFn={(search) => searchVariants(search, { store_id: currentStoreId })}
+                            fetchFn={(search) => searchVariants(search, { store_id: currentStoreId, product_types: 'finished_product' })}
                             queryKey={`variants-search-mobile-${index}`}
                             placeholder="ابحث..."
                             renderOption={(item) => {

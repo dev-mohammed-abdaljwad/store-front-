@@ -124,8 +124,8 @@ function StatCard({ title, value, icon: Icon, color }) {
 function StatusBadge({ active }) {
   if (active) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
-        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
         مفعّل
       </span>
     );
@@ -262,7 +262,7 @@ export default function AdminDashboard() {
         <button
           type="button"
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white transition-colors hover:bg-green-700"
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition-colors hover:bg-primary-dark"
         >
           <Plus size={18} />
           متجر جديد
@@ -274,7 +274,7 @@ export default function AdminDashboard() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <StatCard title="إجمالي المتاجر" value={totalStores} icon={Store} color="bg-blue-500" />
-          <StatCard title="مفعّلة" value={activeStores} icon={Power} color="bg-green-500" />
+          <StatCard title="مفعّلة" value={activeStores} icon={Power} color="bg-primary" />
           <StatCard title="موقوفة" value={inactiveStores} icon={PowerOff} color="bg-red-500" />
         </div>
       )}
@@ -342,7 +342,7 @@ export default function AdminDashboard() {
                             className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs ${
                               isActive
                                 ? 'border-red-200 text-red-600 hover:bg-red-50'
-                                : 'border-green-200 text-green-600 hover:bg-green-50'
+                                : 'border-primary/30 text-primary hover:bg-primary/5'
                             }`}
                           >
                             {isActive ? <PowerOff size={14} /> : <Power size={14} />}

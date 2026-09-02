@@ -120,7 +120,7 @@ function LogoSection({ name, currentLogoUrl, onLogoUpdate, disabled }) {
 
   const initials = useMemo(() => {
     const firstChar = String(name || '').trim().charAt(0);
-    return firstChar || '🌿';
+    return firstChar || '🏪';
   }, [name]);
 
   const isBusy = disabled || uploadMutation.isPending || deleteMutation.isPending;

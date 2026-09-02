@@ -8,6 +8,7 @@ export const getProducts = (page = 1, filters = {}) =>
 			...filters,
 		},
 	});
+
 export const createProduct = (data) => axios.post('/store/products', data);
 export const updateProduct = (id, data) => axios.put(`/store/products/${id}`, data);
 export const deleteProduct = (id) => axios.delete(`/store/products/${id}`);

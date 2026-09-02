@@ -8,7 +8,7 @@ export default function Sidebar({ items, footerItems = [], isOpen = true, onClos
   const store = useAuthStore((state) => state.store);
 
   const storeName = store?.name || 'المتجر';
-  const storeInitial = String(store?.name || '').trim().charAt(0) || '🌿';
+  const storeInitial = String(store?.name || '').trim().charAt(0) || '🏪';
 
   return (
     <>
@@ -32,7 +32,7 @@ export default function Sidebar({ items, footerItems = [], isOpen = true, onClos
             {store?.logo_url ? (
               <img src={store.logo_url} alt="شعار المتجر" className="h-10 w-10 rounded-lg object-cover" />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-700 text-lg font-bold text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-lg font-bold text-white">
                 {storeInitial}
               </div>
             )}

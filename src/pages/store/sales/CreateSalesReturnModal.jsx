@@ -242,7 +242,7 @@ export default function CreateSalesReturnModal({ onClose, onSuccess }) {
                               shouldDirty: true,
                             });
                           }}
-                          fetchFn={searchVariants}
+                          fetchFn={(search) => searchVariants(search, { product_types: 'finished_product' })}
                           queryKey={`sales-return-variant-${index}`}
                           placeholder="ابحث عن منتج..."
                           renderOption={(variant) => `${variant.name} - ${formatCurrency(variant.sale_price || 0)}`}

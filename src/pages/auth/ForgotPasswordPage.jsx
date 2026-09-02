@@ -54,14 +54,14 @@ export default function ForgotPasswordPage() {
         {/* Left promo for large screens */}
         <section className="hidden lg:flex lg:col-span-3 lg:flex-col lg:justify-between lg:overflow-hidden lg:bg-gradient-to-br lg:from-primary lg:to-primary-dark lg:p-12 lg:text-white">
           <div className="flex items-center gap-3 text-2xl font-bold">
-            <span aria-hidden="true">🌿</span>
-            <span>AgriStore</span>
+            <span aria-hidden="true">📒</span>
+            <span>دفتر</span>
           </div>
           <div className="max-w-lg space-y-4">
-            <h1 className="text-4xl font-bold leading-tight">نظام إدارة المخازن الزراعية</h1>
-            <p className="text-lg text-white/90">منصة موحدة لإدارة المنتجات، المخزون، والمبيعات بكفاءة عالية لمتاجر القطاع الزراعي.</p>
+            <h1 className="text-4xl font-bold leading-tight">نظام المحاسبة والمخزن</h1>
+            <p className="text-lg text-white/90">منصة موحدة لإدارة المنتجات، المخزون، والمبيعات بكفاءة عالية لجميع أنواع المتاجر.</p>
           </div>
-          <div className="text-sm text-white/80">حلول ذكية لإدارة المتاجر الزراعية الحديثة</div>
+          <div className="text-sm text-white/80">حلول ذكية لإدارة المتاجر الحديثة</div>
         </section>
 
         {/* Form card */}

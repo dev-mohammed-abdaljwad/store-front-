@@ -28,13 +28,16 @@ import { normalizePaginatedResponse } from '../../../utils/pagination';
 const productSchema = z.object({
   category_id: z.coerce.number().min(1, 'التصنيف مطلوب'),
   name: z.string().min(1, 'اسم المنتج مطلوب'),
+  product_type: z.enum(['finished_product', 'raw_material', 'supply']).default('finished_product'),
 });
 
 const variantSchema = z.object({
   name: z.string().min(1, 'اسم الحجم مطلوب'),
   purchase_price: z.coerce.number().min(0, 'سعر الشراء غير صحيح'),
   sale_price: z.coerce.number().min(0, 'سعر البيع غير صحيح'),
+  units_per_pack: z.coerce.number().min(0.001, 'معامل التحويل يجب أن يكون أكبر من 0').optional().or(z.literal('')),
   low_stock_threshold: z.coerce.number().min(0, 'حد التنبيه غير صحيح').default(0),
+  stock_unit: z.string().default('قطعة'),
 });
 
 const toNumber = (value) => {
@@ -112,6 +115,20 @@ function ProductsTableSkeleton() {
   );
 }
 
+function ProductTypeBadge({ type }) {
+  const types = {
+    finished_product: { label: 'منتج نهائي', class: 'bg-blue-50 text-blue-700 border-blue-200' },
+    raw_material: { label: 'مادة خام', class: 'bg-orange-50 text-orange-700 border-orange-200' },
+    supply: { label: 'مستلزمات', class: 'bg-purple-50 text-purple-700 border-purple-200' },
+  };
+  const config = types[type] || { label: type, class: 'bg-slate-50 text-slate-700 border-slate-200' };
+  return (
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${config.class}`}>
+      {config.label}
+    </span>
+  );
+}
+
 function VariantBadge({ variant, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
   const stock = toNumber(variant?.current_stock);
@@ -129,7 +146,13 @@ function VariantBadge({ variant, onEdit, onDelete }) {
       ? 'bg-amber-500'
       : 'bg-emerald-500';
 
-  const tooltipText = `سعر الشراء: ${toNumber(variant?.purchase_price).toLocaleString('ar-EG')} | سعر البيع: ${toNumber(variant?.sale_price).toLocaleString('ar-EG')}`;
+  const unitsPerPack = toNumber(variant?.units_per_pack);
+  const unitsPerPackText = unitsPerPack > 0 ? ` | معامل التحويل: ${unitsPerPack.toLocaleString('ar-EG')}` : '';
+  const tooltipText = `سعر الشراء: ${toNumber(variant?.purchase_price).toLocaleString('ar-EG')} | سعر البيع: ${toNumber(variant?.sale_price).toLocaleString('ar-EG')}${unitsPerPackText}`;
+
+  const stockDisplay = unitsPerPack > 0
+    ? `×${stock.toLocaleString('ar-EG')} (${(stock * unitsPerPack).toLocaleString('ar-EG')} قطعة)`
+    : `×${stock.toLocaleString('ar-EG')}`;
 
   return (
     <div className="relative">
@@ -141,7 +164,7 @@ function VariantBadge({ variant, onEdit, onDelete }) {
       >
         <span className={`h-1.5 w-1.5 rounded-full ${dotStyle}`} />
         <span>{variant?.name || '—'}</span>
-        <span className="font-mono opacity-80">×{stock.toLocaleString('ar-EG')}</span>
+        <span className="font-mono opacity-80">{stockDisplay}</span>
       </button>
 
       {showMenu ? (
@@ -200,7 +223,10 @@ function ProductRow({
       <td className="px-4 py-3 text-xs text-text-muted">{rowNumber.toLocaleString('ar-EG')}</td>
 
       <td className="px-4 py-3">
-        <p className="font-semibold text-text">{product?.name || '—'}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-text">{product?.name || '—'}</p>
+          <ProductTypeBadge type={product?.product_type} />
+        </div>
         {productCanDelete ? null : <p className="mt-0.5 text-xs text-amber-700">لا يمكن حذف المنتج لوجود حركات مخزون.</p>}
       </td>
 
@@ -264,6 +290,7 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedType, setSelectedType] = useState('all');
 
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
@@ -284,6 +311,7 @@ export default function ProductsPage() {
     defaultValues: {
       category_id: 0,
       name: '',
+      product_type: 'finished_product',
     },
   });
 
@@ -298,22 +326,25 @@ export default function ProductsPage() {
       name: '',
       purchase_price: 0,
       sale_price: 0,
+      units_per_pack: '',
       low_stock_threshold: 0,
+      stock_unit: 'قطعة',
     },
   });
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, selectedType]);
 
   const productsQuery = useQuery({
-    queryKey: ['products', currentStoreId, currentPage, searchTerm, selectedCategory],
+    queryKey: ['products', currentStoreId, currentPage, searchTerm, selectedCategory, selectedType],
     queryFn: async () =>
       normalizePaginatedResponse(
         await getProducts(currentPage, {
           store_id: currentStoreId,
           search: searchTerm || undefined,
           category_id: selectedCategory || undefined,
+          product_type: selectedType !== 'all' ? selectedType : undefined,
         })
       ),
     keepPreviousData: true,
@@ -329,7 +360,7 @@ export default function ProductsPage() {
     onSuccess: (response) => {
       toast.success('تم حفظ المنتج بنجاح');
       setIsProductModalOpen(false);
-      resetProduct({ category_id: 0, name: '' });
+      resetProduct({ category_id: 0, name: '', product_type: 'finished_product' });
 
       const payload = response?.data?.data ?? response?.data ?? {};
       const createdProduct = payload?.product ?? payload;
@@ -340,7 +371,9 @@ export default function ProductsPage() {
           name: '',
           purchase_price: 0,
           sale_price: 0,
+          units_per_pack: '',
           low_stock_threshold: 0,
+          stock_unit: 'قطعة',
         });
         setIsVariantModalOpen(true);
       }
@@ -415,7 +448,7 @@ export default function ProductsPage() {
 
   const openCreateProductModal = () => {
     setEditingProduct(null);
-    resetProduct({ category_id: 0, name: '' });
+    resetProduct({ category_id: 0, name: '', product_type: 'finished_product' });
     setIsProductModalOpen(true);
   };
 
@@ -424,6 +457,7 @@ export default function ProductsPage() {
     resetProduct({
       category_id: toNumber(product?.category_id ?? product?.categoryId),
       name: product?.name || '',
+      product_type: product?.product_type || 'finished_product',
     });
     setIsProductModalOpen(true);
   };
@@ -435,7 +469,9 @@ export default function ProductsPage() {
       name: '',
       purchase_price: 0,
       sale_price: 0,
+      units_per_pack: '',
       low_stock_threshold: 0,
+      stock_unit: 'قطعة',
     });
     setIsVariantModalOpen(true);
   };
@@ -447,7 +483,9 @@ export default function ProductsPage() {
       name: variant?.name || '',
       purchase_price: toNumber(variant?.purchase_price),
       sale_price: toNumber(variant?.sale_price),
+      units_per_pack: variant?.units_per_pack || '',
       low_stock_threshold: toNumber(variant?.low_stock_threshold),
+      stock_unit: variant?.stock_unit || 'قطعة',
     });
     setIsVariantModalOpen(true);
   };
@@ -456,6 +494,7 @@ export default function ProductsPage() {
     const payload = {
       category_id: Number(values.category_id),
       name: values.name?.trim() || '',
+      product_type: values.product_type,
     };
 
     if (editingProduct?.id) {
@@ -479,7 +518,9 @@ export default function ProductsPage() {
       name: values.name?.trim() || '',
       purchase_price: Number(values.purchase_price) || 0,
       sale_price: Number(values.sale_price) || 0,
+      units_per_pack: values.units_per_pack ? Number(values.units_per_pack) : null,
       low_stock_threshold: Number(values.low_stock_threshold) || 0,
+      stock_unit: values.stock_unit || 'قطعة',
     };
 
     if (editingVariant?.id) {
@@ -515,6 +556,29 @@ export default function ProductsPage() {
           </Button>
         }
       />
+
+      {/* تبويبات الفلترة حسب نوع المنتج */}
+      <div className="mb-4 flex flex-wrap gap-2 border-b border-border pb-2">
+        {[
+          { id: 'all', label: 'الكل' },
+          { id: 'finished_product', label: 'منتجات نهائية 🏭' },
+          { id: 'raw_material', label: 'مواد خام 🧪' },
+          { id: 'supply', label: 'مستلزمات 📦' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setSelectedType(tab.id)}
+            className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+              selectedType === tab.id
+                ? 'bg-primary text-white shadow-sm'
+                : 'bg-white text-text hover:bg-slate-50 border border-border'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       <div className="mb-4 grid gap-3 rounded-xl border border-border bg-white p-3 md:grid-cols-2">
         <div className="relative">
@@ -595,7 +659,10 @@ export default function ProductsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="text-[11px] text-text-muted">#{rowNumber.toLocaleString('ar-EG')}</span>
-                        <h3 className="font-bold text-text text-base mt-0.5">{product?.name || '—'}</h3>
+                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                          <h3 className="font-bold text-text text-base">{product?.name || '—'}</h3>
+                          <ProductTypeBadge type={product?.product_type} />
+                        </div>
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 mt-1">
                           {categoryName}
                         </span>
@@ -672,7 +739,7 @@ export default function ProductsPage() {
           setIsProductModalOpen(open);
           if (!open) {
             setEditingProduct(null);
-            resetProduct({ category_id: 0, name: '' });
+            resetProduct({ category_id: 0, name: '', product_type: 'finished_product' });
           }
         }}
       >
@@ -699,6 +766,19 @@ export default function ProductsPage() {
                 ))}
               </select>
               {productErrors.category_id ? <p className="text-sm text-danger">{productErrors.category_id.message}</p> : null}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-text">نوع المنتج *</label>
+              <select
+                {...registerProduct('product_type')}
+                className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <option value="finished_product">منتج نهائي 🏭</option>
+                <option value="raw_material">مادة خام 🧪</option>
+                <option value="supply">مستلزمات 📦 (عبوات، كراتين، استيكرات...)</option>
+              </select>
+              {productErrors.product_type ? <p className="text-sm text-danger">{productErrors.product_type.message}</p> : null}
             </div>
 
             <div className="space-y-2">
@@ -749,7 +829,7 @@ export default function ProductsPage() {
           <form onSubmit={handleSubmitVariant(onSubmitVariant)} className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-text">اسم الحجم *</label>
-              <Input {...registerVariant('name')} placeholder="مثال: 1 كيلو" />
+              <Input {...registerVariant('name')} placeholder="مثال: 1 كيلو أو كرتونة 24 علبة" />
               {variantErrors.name ? <p className="text-sm text-danger">{variantErrors.name.message}</p> : null}
             </div>
 
@@ -765,6 +845,32 @@ export default function ProductsPage() {
                 <Input type="number" min="0" step="0.01" {...registerVariant('sale_price')} />
                 {variantErrors.sale_price ? <p className="text-sm text-danger">{variantErrors.sale_price.message}</p> : null}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-text">معامل التحويل (اختياري)</label>
+              <Input type="number" min="0.001" step="0.001" {...registerVariant('units_per_pack')} placeholder="مثال: 1000 (لبرميل به 1000 سم)" />
+              {variantErrors.units_per_pack ? (
+                <p className="text-sm text-danger">{variantErrors.units_per_pack.message}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-text">وحدة قياس المخزون</label>
+              <select
+                {...registerVariant('stock_unit')}
+                className="h-11 w-full rounded-lg border border-border bg-white px-3 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <option value="قطعة">قطعة</option>
+                <option value="لتر">لتر</option>
+                <option value="مل">مل</option>
+                <option value="كجم">كجم</option>
+                <option value="جرام">جرام</option>
+                <option value="عبوة">عبوة</option>
+                <option value="متر">متر</option>
+                <option value="سم">سم</option>
+              </select>
+              <p className="text-xs text-text-muted">وحدة القياس اللي بيتتبع بيها المخزون (لتر للخامات السائلة، كجم للوزن...)</p>
             </div>
 
             <div className="space-y-2">

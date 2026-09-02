@@ -3,6 +3,7 @@ import {
   BadgePercent,
   Banknote,
   FileSpreadsheet,
+  FlaskConical,
   HandCoins,
   Home,
   Package,
@@ -27,6 +28,7 @@ const pageTitles = {
   '/store/payments': 'المدفوعات',
   '/store/cash': 'الخزنة',
   '/store/inventory': 'المخزن',
+  '/store/manufacturing': 'التصنيع',
   '/store/settings': 'إعدادات المتجر',
 };
 
@@ -37,6 +39,10 @@ const getPageTitle = (pathname) => {
 
   if (pathname.startsWith('/store/suppliers/') && pathname.endsWith('/statement')) {
     return 'كشف حساب مورد';
+  }
+
+  if (pathname === '/store/manufacturing/create') {
+    return 'أمر تصنيع جديد';
   }
 
   if (pathname === '/store/purchase-invoices/create') {
@@ -75,6 +81,7 @@ export default function StoreLayout() {
       { label: 'التصنيفات', icon: BadgePercent, path: '/store/categories' },
       { label: 'فواتير البيع', icon: FileSpreadsheet, path: '/store/sales-invoices' },
       { label: 'فواتير الشراء', icon: ShoppingCart, path: '/store/purchase-invoices' },
+      { label: 'التصنيع', icon: FlaskConical, path: '/store/manufacturing' },
       { label: 'الخزنة', icon: Banknote, path: '/store/cash' },
       { label: 'المخزن', icon: Warehouse, path: '/store/inventory' },
     ],

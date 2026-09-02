@@ -35,8 +35,8 @@ export default function PWAInstallPrompt() {
   return (
     <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:w-80">
       <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-4 shadow-lg">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100">
-          <Download size={24} className="text-green-600" />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+          <Download size={24} className="text-primary" />
         </div>
 
         <div className="flex-1">
@@ -47,7 +47,7 @@ export default function PWAInstallPrompt() {
         <div className="flex shrink-0 flex-col gap-1">
           <button
             onClick={handleInstall}
-            className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
           >
             تثبيت
           </button>

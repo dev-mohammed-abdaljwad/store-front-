@@ -199,7 +199,7 @@ function QuickAddBar({ onAdd, storeId }) {
                 <div>
                   <p className="text-sm font-medium text-text">{variant.name}</p>
                   <p className="text-xs text-text-muted">
-                    المتاح: {Number(variant.current_stock ?? 0).toLocaleString('ar-EG')} قطعة - {formatCurrency(variant.purchase_price ?? variant.sale_price ?? 0)}
+                    المتاح: {Number(variant.current_stock ?? 0).toLocaleString('ar-EG')} {variant.stock_unit || 'قطعة'} - {formatCurrency(variant.purchase_price ?? variant.sale_price ?? 0)}
                   </p>
                 </div>
                 <Plus className="h-4 w-4 shrink-0 text-primary" />
@@ -632,7 +632,7 @@ export default function EditPurchaseInvoicePage() {
                             placeholder="ابحث..."
                             renderOption={(item) => {
                               const currentStock = Number(item.current_stock ?? 0);
-                              return `${item.name} - ${currentStock.toLocaleString('ar-EG')} قطعة`;
+                              return `${item.name} - ${currentStock.toLocaleString('ar-EG')} ${item.stock_unit || 'قطعة'}`;
                             }}
                             renderSelected={(item) => item.name}
                             error={errors.items?.[index]?.variant_id?.message}
@@ -643,7 +643,7 @@ export default function EditPurchaseInvoicePage() {
                             <p className={`mt-1 text-xs ${invalidReceived ? 'text-danger' : 'text-text-muted'}`}>
                               {invalidReceived
                                 ? `المستلم أكبر من المطلوب (${ordered.toLocaleString('ar-EG')})`
-                                : `المتاح: ${stock.toLocaleString('ar-EG')} قطعة`}
+                                : `المتاح: ${stock.toLocaleString('ar-EG')} ${variant.stock_unit || 'قطعة'}`}
                             </p>
                           ) : null}
 
@@ -765,7 +765,7 @@ export default function EditPurchaseInvoicePage() {
                           placeholder="ابحث..."
                           renderOption={(item) => {
                             const currentStock = Number(item.current_stock ?? 0);
-                            return `${item.name} - ${currentStock.toLocaleString('ar-EG')} قطعة`;
+                            return `${item.name} - ${currentStock.toLocaleString('ar-EG')} ${item.stock_unit || 'قطعة'}`;
                           }}
                           renderSelected={(item) => item.name}
                           error={errors.items?.[index]?.variant_id?.message}
@@ -776,7 +776,7 @@ export default function EditPurchaseInvoicePage() {
                           <p className={`mt-1 text-[11px] ${invalidReceived ? 'text-danger' : 'text-text-muted'}`}>
                             {invalidReceived
                               ? `المستلم أكبر من المطلوب (${ordered.toLocaleString('ar-EG')})`
-                              : `المتاح: ${stock.toLocaleString('ar-EG')} قطعة`}
+                              : `المتاح: ${stock.toLocaleString('ar-EG')} ${variant.stock_unit || 'قطعة'}`}
                           </p>
                         ) : null}
 
